@@ -1,0 +1,87 @@
+{
+  "name": "comfort-196",
+  "description": "196 Clinton Ave comfort control loop",
+  "keywords": [
+    "iot",
+    "openai",
+    "google-sheets",
+    "home-automation"
+  ],
+  "env": {
+    "CYCLE_MINUTES": {
+      "description": "Cycle interval minutes",
+      "value": "5"
+    },
+    "TIMEZONE": {
+      "description": "IANA timezone",
+      "value": "America/New_York"
+    },
+    "HOME_LAT": {
+      "description": "Latitude",
+      "value": "40.6897"
+    },
+    "HOME_LON": {
+      "description": "Longitude",
+      "value": "-73.9635"
+    },
+    "OPENAI_API_KEY": {
+      "description": "OpenAI API key"
+    },
+    "OPENAI_MODEL": {
+      "description": "OpenAI model",
+      "value": "gpt-4o-mini"
+    },
+    "GOOGLE_SHEETS_SPREADSHEET_ID": {
+      "description": "Spreadsheet ID"
+    },
+    "GOOGLE_SHEETS_SHEET_NAME": {
+      "description": "Worksheet/tab name",
+      "value": "TimeSeries"
+    },
+    "GOOGLE_SERVICE_ACCOUNT_JSON": {
+      "description": "Service account JSON path in container (mount or dokku config)",
+      "value": "/app/service-account.json"
+    },
+    "ECOWITT_SOURCE": {
+      "description": "mock or local_gateway or cloud_api",
+      "value": "mock"
+    },
+    "ECOWITT_GATEWAY_URL": {
+      "description": "Ecowitt gateway base URL (local gateway mode)",
+      "value": "http://192.168.1.123"
+    },
+    "ECOWITT_MAPPING_JSON": {
+      "description": "Mapping file path",
+      "value": "./config/sensors.mapping.json"
+    },
+    "ECOWITT_CLOUD_APPLICATION_KEY": {
+      "description": "Ecowitt Cloud application key"
+    },
+    "ECOWITT_CLOUD_API_KEY": {
+      "description": "Ecowitt Cloud API key"
+    },
+    "ECOWITT_CLOUD_DEVICE_MAC": {
+      "description": "Optional specific device MAC address to target"
+    },
+    "DRY_RUN": {
+      "description": "If true, do not actuate",
+      "value": "true"
+    },
+    "ALEXA_WEBHOOK_URL": {
+      "description": "Webhook endpoint for Alexa/Transom commands"
+    },
+    "ALEXA_WEBHOOK_TOKEN": {
+      "description": "Auth token for Alexa webhook"
+    },
+    "MEROSS_WEBHOOK_URL": {
+      "description": "Webhook endpoint for Meross plug commands"
+    },
+    "MEROSS_WEBHOOK_TOKEN": {
+      "description": "Auth token for Meross webhook"
+    },
+    "PORT": {
+      "description": "HTTP port",
+      "value": "3000"
+    }
+  }
+}

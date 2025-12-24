@@ -1,0 +1,51 @@
+import { z } from "zod";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const EnvSchema = z.object({
+  CYCLE_MINUTES: z.coerce.number().int().positive().default(5),
+  TIMEZONE: z.string().default("America/New_York"),
+
+  HOME_LAT: z.coerce.number(),
+  HOME_LON: z.coerce.number(),
+
+  OPENAI_API_KEY: z.string().min(1),
+  OPENAI_MODEL: z.string().default("gpt-4o-mini"),
+
+  GOOGLE_SHEETS_SPREADSHEET_ID: z.string().min(1),
+  GOOGLE_SHEETS_SHEET_NAME: z.string().default("TimeSeries"),
+  GOOGLE_SERVICE_ACCOUNT_JSON: z.string().min(1),
+
+  ECOWITT_SOURCE: z.enum(["mock", "local_gateway", "cloud_api"]).default("mock"),
+  ECOWITT_GATEWAY_URL: z.string().optional(),
+  ECOWITT_MAPPING_JSON: z.string().default("./config/sensors.mapping.json"),
+  ECOWITT_CLOUD_APPLICATION_KEY: z.string().optional(),
+  ECOWITT_CLOUD_API_KEY: z.string().optional(),
+  ECOWITT_CLOUD_DEVICE_MAC: z.string().optional(),
+
+  DRY_RUN: z
+    .string()
+    .default("true")
+    .transform((v) => v.toLowerCase() === "true"),
+
+  ALEXA_WEBHOOK_URL: z.string().optional(),
+  ALEXA_WEBHOOK_TOKEN: z.string().optional(),
+
+  MEROSS_WEBHOOK_URL: z.string().optional(),
+  MEROSS_WEBHOOK_TOKEN: z.string().optional(),
+
+  PORT: z.coerce.number().int().positive().default(3000)
+});
+
+export type AppConfig = z.infer<typeof EnvSchema>;
+
+export function loadConfig(): AppConfig {
+  const parsed = EnvSchema.safeParse(process.env);
+  if (!parsed.success) {
+    // eslint-disable-next-line no-console
+    console.error(parsed.error.format());
+    throw new Error("Invalid environment configuration");
+  }
+  return parsed.data;
+}
