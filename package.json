@@ -1,19 +1,33 @@
 {
-  "name": "comfort-steward",
-  "version": "1.0.0",
-  "main": "index.js",
+  "name": "comfort-196",
+  "version": "0.1.0",
+  "private": true,
+  "description": "196 Clinton Ave Apt D43 comfort control loop (weather + sensors + LLM + Alexa/Meross + Google Sheets)",
+  "type": "module",
+  "main": "dist/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "run-once": "tsx scripts/run-once.ts",
+    "init-sheet": "tsx scripts/init-sheet.ts"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/openhouse/comfort-steward.git"
+  "engines": {
+    "node": ">=20.0.0"
   },
-  "author": "Jamie Burkart",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/openhouse/comfort-steward/issues"
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "googleapis": "^140.0.0",
+    "openai": "^4.73.1",
+    "pino": "^9.3.2",
+    "pino-pretty": "^11.2.2",
+    "zod": "^3.23.8"
   },
-  "homepage": "https://github.com/openhouse/comfort-steward#readme",
-  "description": ""
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
 }
