@@ -1,0 +1,19 @@
+{
+  "name": "comfort-steward",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openhouse/comfort-steward.git"
+  },
+  "author": "Jamie Burkart",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/openhouse/comfort-steward/issues"
+  },
+  "homepage": "https://github.com/openhouse/comfort-steward#readme",
+  "description": ""
+}
