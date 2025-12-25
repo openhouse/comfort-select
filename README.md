@@ -26,6 +26,11 @@ Edit `.env`:
 
 * `OPENAI_API_KEY`
 * Google Sheets: `GOOGLE_SHEETS_SPREADSHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`
+* Prompt + site configuration:
+  * `OPENAI_MODEL` (default `gpt-5.2`)
+  * `PROMPT_TEMPLATE_PATH` (default `./config/prompt/panel.hbs`)
+  * `SITE_CONFIG_PATH` (default `./config/sites/196-clinton.json`)
+  * Optional: `CURATORS_JSON` (JSON array string to override curators; defaults to site config)
 * Pick sensor source:
 
   * `ECOWITT_SOURCE=mock` (default) uses `mock/ecowitt.sample.json`
@@ -41,8 +46,8 @@ Edit `.env`:
 * History + prompt controls:
   * `HISTORY_MODE=window|full` (default `window`)
   * `HISTORY_ROWS=200` (rows of history, excluding header, when `window`)
-  * `PROMPT_MAX_CHARS=120000` (safety cap on history CSV length)
-  * `HTTP_TIMEOUT_MS=10000` (network timeout for sensors/weather/webhooks/OpenAI)
+* `PROMPT_MAX_CHARS=120000` (safety cap on history CSV length)
+* `HTTP_TIMEOUT_MS=10000` (network timeout for sensors/weather/webhooks/OpenAI)
 
 ### 3) Initialize the sheet header row
 
@@ -64,6 +69,17 @@ npm run dev
 
 Open [http://localhost:3000/healthz](http://localhost:3000/healthz) to see cycle status.
 
+### Prompt + site configuration
+
+The LLM prompt is rendered from a Handlebars template and a site JSON config:
+
+* Template: `config/prompt/panel.hbs` (override with `PROMPT_TEMPLATE_PATH`)
+* Site config: `config/sites/196-clinton.json` (override with `SITE_CONFIG_PATH`)
+* Curators: defaults come from the site config, but you can override via `CURATORS_JSON` env
+* Dev helper: `npm run print-prompt` renders the current prompt using mock sensors + live weather (falls back to a stub if unavailable)
+
+Edit these files to change curator names or site facts without touching TypeScript. The prompt is validated at load time via Zod; malformed JSON will fail fast.
+
 ## Google Sheets layout
 
 This MVP uses a single tab (default `TimeSeries`) and appends one row per cycle.
@@ -74,9 +90,10 @@ match the expected columns it will block actuation and surface an error.
 ### MVP gotchas
 
 * **Sheet header migrations**: the header now includes observability columns (`decision_id`, `llm_model`,
-  `actuation_ok`, `sensors_raw_json`, optional `openai_response_id`). If your existing tab was created
-  before this change, create a fresh tab or update the header row to exactly match `SHEET_HEADER`
-  (see `src/adapters/store/googleSheetsStore.ts`). A mismatch will cause cycles to skip actuation.
+  `actuation_ok`, `sensors_raw_json`, optional `openai_response_id`, `prompt_template_version`, `site_config_id`).
+  If your existing tab was created before this change, create a fresh tab or update the header row to
+  exactly match `SHEET_HEADER` (see `src/adapters/store/googleSheetsStore.ts`). A mismatch will cause
+  cycles to skip actuation.
 * **Radiator sensor naming**: the Ecowitt mapping keeps the id `radiator` but represents the *Living
   Room Radiator (behind)* sensor. Adjust your analytics accordingly.
 

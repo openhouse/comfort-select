@@ -10,7 +10,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "run-once": "tsx scripts/run-once.ts",
-    "init-sheet": "tsx scripts/init-sheet.ts"
+    "init-sheet": "tsx scripts/init-sheet.ts",
+    "print-prompt": "tsx scripts/print-prompt.ts"
   },
   "engines": {
     "node": ">=20.0.0"
@@ -19,6 +20,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "googleapis": "^140.0.0",
+    "handlebars": "^4.7.8",
     "openai": "^4.73.1",
     "pino": "^9.3.2",
     "pino-pretty": "^11.2.2",

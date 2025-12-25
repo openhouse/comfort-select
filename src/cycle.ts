@@ -1,4 +1,5 @@
 import { AppConfig } from "./config.js";
+import { PromptAssets } from "./promptAssets.js";
 import { logger } from "./utils/logger.js";
 import { nowLocalIso, nowUtcIso } from "./utils/time.js";
 import { getWeatherNow } from "./adapters/weather/openMeteo.js";
@@ -134,10 +135,11 @@ function fallbackSensors(reason: string): SensorsNow {
   };
 }
 
-export async function runCycleOnce(cfg: AppConfig): Promise<CycleRecord> {
+export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): Promise<CycleRecord> {
   const decision_id = `decision_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const siteTimezone = promptAssets.siteConfig.site.timezone ?? cfg.TIMEZONE;
   const timestamp_utc_iso = nowUtcIso();
-  const timestamp_local_iso = nowLocalIso(cfg.TIMEZONE);
+  const timestamp_local_iso = nowLocalIso(siteTimezone);
 
   const sheetsCfg: SheetsStoreConfig = {
     spreadsheetId: cfg.GOOGLE_SHEETS_SPREADSHEET_ID,
@@ -155,7 +157,7 @@ export async function runCycleOnce(cfg: AppConfig): Promise<CycleRecord> {
     weather = await getWeatherNow({
       lat: cfg.HOME_LAT,
       lon: cfg.HOME_LON,
-      timezone: cfg.TIMEZONE,
+      timezone: siteTimezone,
       timeoutMs: cfg.HTTP_TIMEOUT_MS
     });
   } catch (e: any) {
@@ -217,12 +219,13 @@ export async function runCycleOnce(cfg: AppConfig): Promise<CycleRecord> {
         ? historyRows
         : [historyRows[0], ...historyRows.slice(-cfg.HISTORY_ROWS)];
 
-  const prompt = buildPrompt({
+  const { prompt, promptVersion, siteConfigId } = buildPrompt({
     weather: weather!,
     sensors: sensors!,
     historyRows: historyForPrompt,
-    timezone: cfg.TIMEZONE,
-    promptMaxChars: cfg.PROMPT_MAX_CHARS
+    timezone: siteTimezone,
+    promptMaxChars: cfg.PROMPT_MAX_CHARS,
+    promptAssets
   });
 
   const decisionErrors: string[] = [];
@@ -232,7 +235,12 @@ export async function runCycleOnce(cfg: AppConfig): Promise<CycleRecord> {
   } else {
     try {
       const { decision: llmDecision, responseId } = await decideWithOpenAI(
-        { apiKey: cfg.OPENAI_API_KEY, model: cfg.OPENAI_MODEL, timeoutMs: cfg.HTTP_TIMEOUT_MS * 3 },
+        {
+          apiKey: cfg.OPENAI_API_KEY,
+          model: cfg.OPENAI_MODEL,
+          timeoutMs: cfg.HTTP_TIMEOUT_MS * 3,
+          curatorLabels: promptAssets.curatorLabels
+        },
         prompt
       );
       decision = { ...llmDecision, openai_response_id: responseId };
@@ -258,6 +266,8 @@ export async function runCycleOnce(cfg: AppConfig): Promise<CycleRecord> {
     timestamp_local_iso,
     timestamp_utc_iso,
     llm_model: cfg.OPENAI_MODEL,
+    prompt_template_version: promptVersion,
+    site_config_id: siteConfigId,
     weather: weather!,
     sensors: sensors!,
     decision,

@@ -3,8 +3,10 @@ import { logger } from "./utils/logger.js";
 import { runCycleOnce } from "./cycle.js";
 import { startServer } from "./server.js";
 import type { CycleRecord } from "./types.js";
+import { loadPromptAssetsFromConfig } from "./promptAssets.js";
 
 const cfg = loadConfig();
+const promptAssets = loadPromptAssetsFromConfig(cfg);
 
 let last: CycleRecord | null = null;
 let running = false;
@@ -21,7 +23,7 @@ async function tick() {
   }
   running = true;
   try {
-    last = await runCycleOnce(cfg);
+    last = await runCycleOnce(cfg, promptAssets);
   } catch (e: any) {
     logger.error({ err: e }, "Cycle crashed");
   } finally {
