@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { SensorsNow, RoomReading } from "../../types.js";
 import { logger } from "../../utils/logger.js";
+import { fetchWithTimeout } from "../../utils/fetchWithTimeout.js";
 
 type MappingEntry = {
   id:
@@ -57,6 +58,7 @@ async function getDeviceMac(params: {
   applicationKey: string;
   apiKey: string;
   preferredMac?: string;
+  timeoutMs: number;
 }): Promise<string> {
   if (params.preferredMac) return params.preferredMac;
 
@@ -66,7 +68,7 @@ async function getDeviceMac(params: {
   url.searchParams.set("limit", "10");
   url.searchParams.set("page", "1");
 
-  const resp = await fetch(url.toString());
+  const resp = await fetchWithTimeout(url.toString(), { timeoutMs: params.timeoutMs });
   if (!resp.ok) throw new Error(`Ecowitt Cloud device/list error: ${resp.status} ${resp.statusText}`);
   const json = (await resp.json()) as any;
 
@@ -97,6 +99,7 @@ async function fetchRealTime(params: {
   applicationKey: string;
   apiKey: string;
   mac: string;
+  timeoutMs: number;
 }): Promise<any> {
   const url = new URL("/api/v3/device/real_time", params.baseUrl);
   url.searchParams.set("application_key", params.applicationKey);
@@ -104,7 +107,7 @@ async function fetchRealTime(params: {
   url.searchParams.set("mac", params.mac);
   url.searchParams.set("call_back", "all");
 
-  const resp = await fetch(url.toString());
+  const resp = await fetchWithTimeout(url.toString(), { timeoutMs: params.timeoutMs });
   if (!resp.ok) throw new Error(`Ecowitt Cloud device/real_time error: ${resp.status} ${resp.statusText}`);
   return (await resp.json()) as any;
 }
@@ -115,6 +118,7 @@ export async function getSensorsNowFromCloud(params: {
   apiKey: string;
   preferredMac?: string;
   baseUrl?: string;
+  timeoutMs: number;
 }): Promise<SensorsNow> {
   const mapping = await loadMapping(params.mappingPath);
   const baseUrl = params.baseUrl ?? "https://api.ecowitt.net";
@@ -123,14 +127,16 @@ export async function getSensorsNowFromCloud(params: {
     baseUrl,
     applicationKey: params.applicationKey,
     apiKey: params.apiKey,
-    preferredMac: params.preferredMac?.trim() || undefined
+    preferredMac: params.preferredMac?.trim() || undefined,
+    timeoutMs: params.timeoutMs
   });
 
   const payload = await fetchRealTime({
     baseUrl,
     applicationKey: params.applicationKey,
     apiKey: params.apiKey,
-    mac
+    mac,
+    timeoutMs: params.timeoutMs
   });
 
   if (process.env.NODE_ENV !== "production") {

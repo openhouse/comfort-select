@@ -3,8 +3,7 @@ export function nowUtcIso(): string {
 }
 
 export function nowLocalIso(timezone: string): string {
-  // ISO-ish local string with timezone offset is tricky; we keep an unambiguous string:
-  // yyyy-mm-ddThh:mm:ss in the specified timezone, plus timezone name.
+  const date = new Date();
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
     year: "numeric",
@@ -14,10 +13,9 @@ export function nowLocalIso(timezone: string): string {
     minute: "2-digit",
     second: "2-digit",
     hour12: false
-  }).formatToParts(new Date());
+  }).formatToParts(date);
 
-  const get = (type: string) =>
-    parts.find((p) => p.type === type)?.value ?? "00";
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
 
   const yyyy = get("year");
   const mm = get("month");
@@ -26,5 +24,18 @@ export function nowLocalIso(timezone: string): string {
   const mi = get("minute");
   const ss = get("second");
 
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss} ${timezone}`;
+  // Compute offset minutes between local timezone and UTC
+  const localDate = new Date(
+    date.toLocaleString("en-US", {
+      timeZone: timezone
+    })
+  );
+  const offsetMinutes = Math.round((localDate.getTime() - date.getTime()) / 60000);
+
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const absMinutes = Math.abs(offsetMinutes);
+  const offsetHours = String(Math.floor(absMinutes / 60)).padStart(2, "0");
+  const offsetMins = String(absMinutes % 60).padStart(2, "0");
+
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}${sign}${offsetHours}:${offsetMins}`;
 }

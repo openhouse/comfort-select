@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import { SensorsNow, RoomReading } from "../../types.js";
+import { fetchWithTimeout } from "../../utils/fetchWithTimeout.js";
 
 type MappingEntry = {
   id:
@@ -34,11 +35,12 @@ function coerceNumber(v: unknown): number {
 export async function getSensorsNowFromLocalGateway(params: {
   gatewayUrl: string;
   mappingPath: string;
+  timeoutMs: number;
 }): Promise<SensorsNow> {
   const mapping = await loadMapping(params.mappingPath);
 
   const url = new URL("/get_livedata_info", params.gatewayUrl);
-  const resp = await fetch(url.toString(), { method: "GET" });
+  const resp = await fetchWithTimeout(url.toString(), { method: "GET", timeoutMs: params.timeoutMs });
   if (!resp.ok) throw new Error(`Ecowitt gateway error: ${resp.status} ${resp.statusText}`);
   const json = (await resp.json()) as any;
 

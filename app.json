@@ -31,6 +31,22 @@
       "description": "OpenAI model",
       "value": "gpt-4o-mini"
     },
+    "HISTORY_MODE": {
+      "description": "History windowing mode: window or full",
+      "value": "window"
+    },
+    "HISTORY_ROWS": {
+      "description": "Rows of history (excluding header) when windowing",
+      "value": "200"
+    },
+    "PROMPT_MAX_CHARS": {
+      "description": "Safety cap for history CSV chars in prompt",
+      "value": "120000"
+    },
+    "HTTP_TIMEOUT_MS": {
+      "description": "Network timeout in milliseconds",
+      "value": "10000"
+    },
     "GOOGLE_SHEETS_SPREADSHEET_ID": {
       "description": "Spreadsheet ID"
     },

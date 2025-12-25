@@ -9,7 +9,7 @@ function toCsv(rows: string[][]): string {
       r
         .map((cell) => {
           const s = String(cell ?? "");
-          if (s.includes(",") || s.includes('"') || s.includes("\\n")) {
+          if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
             return `"${s.replace(/"/g, '""')}"`;
           }
           return s;
@@ -23,9 +23,10 @@ export function buildPrompt(params: {
   weather: WeatherNow;
   sensors: SensorsNow;
   historyRows: string[][];
+  promptMaxChars?: number;
   timezone: string;
 }): string {
-  const { weather, sensors, historyRows, timezone } = params;
+  const { weather, sensors, historyRows, timezone, promptMaxChars } = params;
 
   const sensorLines = sensors.readings
     .map((r) => {
@@ -39,13 +40,32 @@ export function buildPrompt(params: {
     })
     .join("\n");
 
-  const historyCsv = toCsv(
-    historyRows.length ? historyRows : [Array.from(SHEET_HEADER)]
-  );
+  const rowsForCsv = historyRows.length ? historyRows : [Array.from(SHEET_HEADER)];
 
-  return `Please role play as Gail S. Brager, Stefano Schiavon, and Deborah Treisman:
-- indicate who is speaking
-- say what you think
+  const historyCsvFull = toCsv(rowsForCsv);
+  let historyCsv = historyCsvFull;
+
+  if (promptMaxChars && historyCsv.length > promptMaxChars) {
+    // Keep header + most recent rows until under the cap
+    const header = rowsForCsv[0] ?? [];
+    const dataRows = rowsForCsv.slice(1);
+    let windowSize = dataRows.length;
+    while (windowSize > 0) {
+      const candidate = toCsv([header, ...dataRows.slice(-windowSize)]);
+      if (candidate.length <= promptMaxChars) {
+        historyCsv = candidate;
+        break;
+      }
+      windowSize = Math.max(0, windowSize - Math.ceil(windowSize / 3));
+    }
+    if (historyCsv.length > promptMaxChars) {
+      historyCsv = toCsv([header]);
+    }
+  }
+
+  return `Please role play as Gail S. Brager, Yehuda Katz, Paulus Schoutsen, Simon Willison, Stefano Schiavon, and Deborah Treisman:
+- indicate who is speaking (use labels exactly as: Gail S. Brager (imagined panel), Yehuda Katz (imagined panel), Paulus Schoutsen (imagined panel), Simon Willison (imagined panel), Stefano Schiavon (imagined panel), Deborah Treisman (imagined panel))
+- provide short notes from each speaker
 
 Important: This is an imagined panel inspired by these experts' public work. Do NOT claim to be them or to speak for them.
 
