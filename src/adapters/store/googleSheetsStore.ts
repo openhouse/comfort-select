@@ -119,6 +119,10 @@ export async function ensureHeaderRow(cfg: SheetsStoreConfig, header: string[]):
   }
 }
 
+function normalizeRowValues(row: (string | number | boolean)[]): (string | number)[] {
+  return row.map((v) => (typeof v === "boolean" ? String(v) : v ?? ""));
+}
+
 export async function appendRow(cfg: SheetsStoreConfig, row: (string | number | boolean)[]): Promise<void> {
   const sheets = await getSheetsClient(cfg.serviceAccountJsonPath);
   await sheets.spreadsheets.values.append({
@@ -126,7 +130,7 @@ export async function appendRow(cfg: SheetsStoreConfig, row: (string | number | 
     range: `${cfg.sheetName}!A:ZZ`,
     valueInputOption: "USER_ENTERED",
     insertDataOption: "INSERT_ROWS",
-    requestBody: { values: [row.map((v) => (typeof v === "boolean" ? String(v) : v))] }
+    requestBody: { values: [normalizeRowValues(row)] }
   });
 }
 
@@ -223,4 +227,23 @@ export function cycleRecordToRow(rec: CycleRecord, siteConfig: SiteConfig, heade
   values.site_config_id = rec.site_config_id ?? "";
 
   return header.map((key) => values[key] ?? "");
+}
+
+export async function overwriteSheet(
+  cfg: SheetsStoreConfig,
+  rows: (string | number | boolean)[][]
+): Promise<void> {
+  const sheets = await getSheetsClient(cfg.serviceAccountJsonPath);
+  const range = `${cfg.sheetName}!A:ZZ`;
+  await sheets.spreadsheets.values.clear({
+    spreadsheetId: cfg.spreadsheetId,
+    range
+  });
+  if (rows.length === 0) return;
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: cfg.spreadsheetId,
+    range: `${cfg.sheetName}!A1`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: rows.map((row) => normalizeRowValues(row)) }
+  });
 }

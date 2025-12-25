@@ -69,6 +69,21 @@
       "description": "Service account JSON path in container (mount or dokku config)",
       "value": "/app/service-account.json"
     },
+    "MONGODB_URI": {
+      "description": "MongoDB connection string (MONGO_URL also accepted)"
+    },
+    "MONGODB_DB_NAME": {
+      "description": "MongoDB database name",
+      "value": "comfort_select"
+    },
+    "MONGODB_COLLECTION": {
+      "description": "MongoDB collection for cycle records",
+      "value": "cycle_records"
+    },
+    "SHEET_SYNC_ROWS": {
+      "description": "Rows to sync to Google Sheets dashboard from MongoDB",
+      "value": "2000"
+    },
     "ECOWITT_SOURCE": {
       "description": "mock or local_gateway or cloud_api",
       "value": "mock"

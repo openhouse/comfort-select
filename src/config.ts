@@ -24,6 +24,7 @@ const EnvSchema = z.object({
   HISTORY_MODE: z.enum(["full", "window"]).default("window"),
   HISTORY_ROWS: z.coerce.number().int().positive().default(200),
   PROMPT_MAX_CHARS: z.coerce.number().int().positive().default(120_000),
+  SHEET_SYNC_ROWS: z.coerce.number().int().positive().default(2000),
 
   HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
 
@@ -45,10 +46,15 @@ const EnvSchema = z.object({
   MEROSS_WEBHOOK_URL: z.string().optional(),
   MEROSS_WEBHOOK_TOKEN: z.string().optional(),
 
+  MONGODB_URI: z.string().optional(),
+  MONGO_URL: z.string().optional(),
+  MONGODB_DB_NAME: z.string().default("comfort_select"),
+  MONGODB_COLLECTION: z.string().default("cycle_records"),
+
   PORT: z.coerce.number().int().positive().default(3000)
 });
 
-export type AppConfig = z.infer<typeof EnvSchema>;
+export type AppConfig = Omit<z.infer<typeof EnvSchema>, "MONGO_URL"> & { MONGODB_URI: string };
 
 export function loadConfig(): AppConfig {
   const parsed = EnvSchema.safeParse(process.env);
@@ -57,5 +63,11 @@ export function loadConfig(): AppConfig {
     console.error(parsed.error.format());
     throw new Error("Invalid environment configuration");
   }
-  return parsed.data;
+  const raw = parsed.data;
+  const uri = raw.MONGODB_URI ?? raw.MONGO_URL;
+  if (!uri) {
+    throw new Error("MONGODB_URI (or MONGO_URL) is required");
+  }
+  const { MONGO_URL, ...rest } = raw;
+  return { ...rest, MONGODB_URI: uri };
 }

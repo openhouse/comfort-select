@@ -3,12 +3,12 @@
 A Node/TypeScript service that runs every **N minutes** to:
 1) fetch outdoor weather for 196 Clinton Ave, Brooklyn, NY 11205  
 2) fetch indoor temperature/humidity from Ecowitt sensors (per-sensor logging; living room has ambient + radiator-proximate)  
-3) read the full Google Sheets time-series history  
+3) load MongoDB cycle history (append-only) to build the LLM prompt  
 4) call the OpenAI API with a dynamic prompt (panel-style “expert perspectives” + structured output)  
 5) actuate:
    - Vornado Transom AE (bathroom + kitchen) via an Alexa adapter
    - Vornado 630 fans (kitchen + living room) via Meross smart plugs adapter
-6) append a new row to Google Sheets with observations + decisions + actuation results
+6) persist the CycleRecord to MongoDB and rebuild a Google Sheets dashboard tab (best-effort, rolling window)
 
 > Note on “role play”: this repo **does not claim** to be real people. It asks the model to produce an *imagined panel* inspired by named experts, but it must not claim identity.
 
@@ -20,14 +20,29 @@ npm install
 cp .env.example .env
 ```
 
-### 2) Configure
+### 2) Start MongoDB locally
+Run Mongo with Docker (data in a local volume):
+```bash
+docker run --name comfort-mongo -d -p 27017:27017 mongo:6
+```
+
+### 3) Configure
 
 Edit `.env`:
 
-* `OPENAI_API_KEY`
-* Google Sheets: `GOOGLE_SHEETS_SPREADSHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`
-* Prompt + site configuration:
+* OpenAI:
+  * `OPENAI_API_KEY`
   * `OPENAI_MODEL` (default `gpt-5.2`)
+* MongoDB (source of truth for history):
+  * `MONGODB_URI` (or `MONGO_URL`) — for local Docker: `mongodb://localhost:27017`
+  * `MONGODB_DB_NAME` (default `comfort_select`)
+  * `MONGODB_COLLECTION` (default `cycle_records`)
+* Google Sheets dashboard (projection only):
+  * `GOOGLE_SHEETS_SPREADSHEET_ID`
+  * `GOOGLE_SHEETS_SHEET_NAME` (system-owned data tab, default `TimeSeries`)
+  * `GOOGLE_SERVICE_ACCOUNT_JSON`
+  * `SHEET_SYNC_ROWS` (default `2000`, number of most recent cycles mirrored to Sheets)
+* Prompt + site configuration:
   * `PROMPT_TEMPLATE_PATH` (default `./config/prompt/llm-prompt-template.md.hbs`)
   * `SITE_CONFIG_PATH` (default `./config/site.config.json`)
   * Optional: `CURATORS_JSON` (JSON array string to override curators; defaults to site config)
@@ -49,19 +64,19 @@ Edit `.env`:
 * `PROMPT_MAX_CHARS=120000` (safety cap on history CSV length)
 * `HTTP_TIMEOUT_MS=10000` (network timeout for sensors/weather/webhooks/OpenAI)
 
-### 3) Initialize the sheet header row
+### 4) Initialize the sheet header row (overwrites the data tab)
 
 ```bash
 npm run init-sheet
 ```
 
-### 4) Run once
+### 5) Run once (requires Mongo running)
 
 ```bash
 npm run run-once
 ```
 
-### 5) Run the daemon
+### 6) Run the daemon
 
 ```bash
 npm run dev
@@ -80,20 +95,20 @@ The LLM prompt is rendered from a Handlebars template and a site JSON config:
 
 Edit these files to change curator names or site facts without touching TypeScript. The prompt is validated at load time via Zod; malformed JSON will fail fast.
 
-## Google Sheets layout
+## MongoDB as the primary history store
 
-This MVP uses a single tab (default `TimeSeries`) and appends one row per cycle.
-The header row is written by `scripts/init-sheet.ts`.
-The runtime loop now also calls `ensureHeaderRow` before every cycle; if the sheet header does not
-match the expected columns it will block actuation and surface an error.
+* MongoDB stores the full `CycleRecord` (weather, sensors, telemetry, features, decision, actuation) in an append-only collection (default `cycle_records`).
+* Prompt history is pulled from MongoDB (not Sheets). `HISTORY_MODE` + `HISTORY_ROWS` control the query window, and the prompt renderer further trims if `PROMPT_MAX_CHARS` is exceeded.
+* Each cycle inserts with a unique `decision_id`, indexed timestamps, and a deterministic hash of the current site config for observability.
+* MongoDB errors are treated as blocking (to avoid actuating without durable history). Sheet export errors are non-blocking.
+* `npm run rebuild-sheet` reloads the most recent `SHEET_SYNC_ROWS` records from MongoDB and overwrites the managed sheet tab.
 
-### MVP gotchas
+## Google Sheets layout (dashboard projection)
 
-* **Sheet header migrations**: the header now includes observability columns (`decision_id`, `llm_model`,
-  `actuation_ok`, `sensors_raw_json`, optional `openai_response_id`, `prompt_template_version`, `site_config_id`).
-  If your existing tab was created before this change, create a fresh tab or update the header row to
-  exactly match the generated header (see `buildSheetHeader` in `src/adapters/store/googleSheetsStore.ts`). A mismatch will cause
-  cycles to skip actuation.
+* `GOOGLE_SHEETS_SHEET_NAME` is **system-owned**. Every cycle clears and rewrites that tab with `[header, last SHEET_SYNC_ROWS]` derived from MongoDB.
+* Put user charts/analysis on a separate tab (e.g., `Dashboard`) that references the data tab; the system will not touch other tabs.
+* The header is derived from the current site config. If sensors/devices/features change, the tab is rebuilt automatically; older records will show blanks for fields that did not exist yet.
+* Sheet sync is best-effort; the control loop continues even if the Sheets API is unreachable.
 
 ## Actuation adapters (MVP)
 
@@ -118,32 +133,29 @@ When `DRY_RUN=true`, the service logs the actions but does not call webhooks.
 dokku apps:create comfort-196
 ```
 
-2. Set config vars:
+2. Provision MongoDB with persistence (using the Dokku plugin):
+
+```bash
+dokku plugin:install https://github.com/dokku/dokku-mongo.git mongo
+dokku mongo:create comfort-select-db
+dokku mongo:link comfort-select-db comfort-196
+```
+
+This injects `MONGO_URL`; the app accepts either `MONGO_URL` or `MONGODB_URI`.
+
+3. Set config vars (include Mongo + Sheets):
 
 ```bash
 dokku config:set comfort-196 \
   OPENAI_API_KEY=... \
   GOOGLE_SHEETS_SPREADSHEET_ID=... \
   GOOGLE_SHEETS_SHEET_NAME=TimeSeries \
+  GOOGLE_SERVICE_ACCOUNT_JSON=/app/service-account.json \
   HOME_LAT=40.692 HOME_LON=-73.969306 \
   CYCLE_MINUTES=5 TIMEZONE=America/New_York \
-  DRY_RUN=true
+  DRY_RUN=true \
+  SHEET_SYNC_ROWS=2000
 ```
-
-For cloud sensors, also set:
-
-```bash
-dokku config:set comfort-196 \
-  ECOWITT_SOURCE=cloud_api \
-  ECOWITT_CLOUD_APPLICATION_KEY=... \
-  ECOWITT_CLOUD_API_KEY=... \
-  ECOWITT_CLOUD_DEVICE_MAC=...
-```
-
-3. Provide the Google service account JSON inside the container:
-
-* simplest MVP approach: add it as a Dokku config file and mount it to `/app/service-account.json`
-* then set: `GOOGLE_SERVICE_ACCOUNT_JSON=/app/service-account.json`
 
 4. Push:
 
@@ -155,6 +167,16 @@ git push dokku main
 
 ```bash
 dokku logs comfort-196 -t
+```
+
+For cloud sensors, also set:
+
+```bash
+dokku config:set comfort-196 \
+  ECOWITT_SOURCE=cloud_api \
+  ECOWITT_CLOUD_APPLICATION_KEY=... \
+  ECOWITT_CLOUD_API_KEY=... \
+  ECOWITT_CLOUD_DEVICE_MAC=...
 ```
 
 ## Safety + reliability (MVP stance)

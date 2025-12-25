@@ -10,11 +10,9 @@ import {
 import { getSensorsNowFromCloud } from "./adapters/sensors/ecowittCloud.js";
 import {
   SheetsStoreConfig,
-  appendRow,
-  ensureHeaderRow,
+  buildSheetHeader,
   cycleRecordToRow,
-  readAllRows,
-  buildSheetHeader
+  overwriteSheet
 } from "./adapters/store/googleSheetsStore.js";
 import { buildPrompt } from "./llm/prompt.js";
 import { decideWithOpenAI } from "./llm/openaiDecider.js";
@@ -29,6 +27,13 @@ import {
   WeatherNow
 } from "./types.js";
 import { summarizeTelemetry } from "./utils/telemetry.js";
+import {
+  MongoStore,
+  getRecentCycleRecords,
+  hashSiteConfig,
+  initMongo,
+  insertCycleRecord
+} from "./adapters/store/mongoStore.js";
 
 function noopDecision(reason: string, speakers: string[]): Decision {
   const panel = speakers.length > 0 ? speakers : ["System (fallback)"];
@@ -162,6 +167,19 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
   const blockingErrors: string[] = [];
   const nonBlockingErrors: string[] = [];
 
+  let mongoStore: MongoStore | null = null;
+  try {
+    mongoStore = await initMongo({
+      uri: cfg.MONGODB_URI,
+      dbName: cfg.MONGODB_DB_NAME,
+      collectionName: cfg.MONGODB_COLLECTION
+    });
+  } catch (e: any) {
+    const msg = `Failed to connect to MongoDB: ${e?.message ?? String(e)}`;
+    logger.error({ err: e }, msg);
+    blockingErrors.push(msg);
+  }
+
   let weather: WeatherNow | null = null;
   try {
     const loc = promptAssets.siteConfig.site.location;
@@ -214,25 +232,21 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
   const telemetry = summarizeTelemetry(promptAssets.siteConfig, sensors!);
   const features = telemetry.features;
 
-  let headerReady = false;
-  let historyRows: string[][] = [];
-  try {
-    await ensureHeaderRow(sheetsCfg, sheetHeader);
-    headerReady = true;
-    historyRows = await readAllRows(sheetsCfg);
-  } catch (e: any) {
-    const msg = `Failed to read Google Sheet: ${e?.message ?? String(e)}`;
-    logger.error({ err: e }, msg);
-    blockingErrors.push(msg);
+  let historyForPrompt: string[][] = [sheetHeader];
+  if (mongoStore) {
+    try {
+      const historyRecords = await getRecentCycleRecords(
+        mongoStore,
+        cfg.HISTORY_MODE === "window" ? cfg.HISTORY_ROWS : undefined
+      );
+      const rowsForPrompt = historyRecords.map((rec) => cycleRecordToRow(rec, promptAssets.siteConfig, sheetHeader));
+      historyForPrompt = [sheetHeader, ...rowsForPrompt.map((row) => row.map((cell) => String(cell ?? "")))];
+    } catch (e: any) {
+      const msg = `Failed to read Mongo history: ${e?.message ?? String(e)}`;
+      logger.error({ err: e }, msg);
+      blockingErrors.push(msg);
+    }
   }
-
-  const historyRowsWithHeader = historyRows.length === 0 ? [sheetHeader] : historyRows;
-  const historyForPrompt =
-    cfg.HISTORY_MODE === "full"
-      ? historyRowsWithHeader
-      : historyRowsWithHeader.length <= 1
-        ? historyRowsWithHeader
-        : [historyRowsWithHeader[0], ...historyRowsWithHeader.slice(-cfg.HISTORY_ROWS)];
 
   const { prompt, promptVersion, siteConfigId } = buildPrompt({
     weather: weather!,
@@ -293,13 +307,26 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
     actuation
   };
 
-  if (headerReady) {
+  const siteConfigHash = hashSiteConfig(promptAssets.siteConfig);
+
+  if (mongoStore) {
     try {
-      await appendRow(sheetsCfg, cycleRecordToRow(record, promptAssets.siteConfig, sheetHeader));
+      await insertCycleRecord(mongoStore, record, { siteConfigHash });
     } catch (e: any) {
-      logger.error({ err: e }, "Failed to append to Google Sheet");
-      // Keep record for observability even if sheet write fails.
-      actuation.errors.push(`Sheet append failed: ${e?.message ?? String(e)}`);
+      const msg = `Failed to insert cycle record into MongoDB: ${e?.message ?? String(e)}`;
+      logger.error({ err: e }, msg);
+      actuation.errors.push(msg);
+    }
+
+    try {
+      const rowsForSheet = await getRecentCycleRecords(mongoStore, cfg.SHEET_SYNC_ROWS);
+      const projectedRows = rowsForSheet.map((rec) => cycleRecordToRow(rec, promptAssets.siteConfig, sheetHeader));
+      await overwriteSheet(sheetsCfg, [sheetHeader, ...projectedRows]);
+    } catch (e: any) {
+      const msg = `Failed to sync Google Sheet from MongoDB (non-blocking): ${e?.message ?? String(e)}`;
+      logger.error({ err: e }, msg);
+      nonBlockingErrors.push(msg);
+      actuation.errors.push(msg);
     }
   }
 
