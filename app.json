@@ -29,7 +29,18 @@
     },
     "OPENAI_MODEL": {
       "description": "OpenAI model",
-      "value": "gpt-4o-mini"
+      "value": "gpt-5.2"
+    },
+    "PROMPT_TEMPLATE_PATH": {
+      "description": "Path to Handlebars prompt template",
+      "value": "./config/prompt/panel.hbs"
+    },
+    "SITE_CONFIG_PATH": {
+      "description": "Path to site JSON config",
+      "value": "./config/sites/196-clinton.json"
+    },
+    "CURATORS_JSON": {
+      "description": "Optional JSON array string overriding curators"
     },
     "HISTORY_MODE": {
       "description": "History windowing mode: window or full",

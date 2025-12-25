@@ -70,7 +70,9 @@ export const SHEET_HEADER = [
   "llm_model",
   "actuation_ok",
   "sensors_raw_json",
-  "openai_response_id"
+  "openai_response_id",
+  "prompt_template_version",
+  "site_config_id"
 ] as const;
 
 export type SheetHeaderKey = (typeof SHEET_HEADER)[number];
@@ -226,6 +228,8 @@ export function cycleRecordToRow(rec: CycleRecord): (string | number | boolean)[
     rec.llm_model,
     rec.actuation.actuation_ok,
     JSON.stringify(rec.sensors.raw ?? {}),
-    rec.decision.openai_response_id ?? ""
+    rec.decision.openai_response_id ?? "",
+    rec.prompt_template_version ?? "",
+    rec.site_config_id ?? ""
   ];
 }

@@ -1,6 +1,7 @@
 import { WeatherNow, SensorsNow } from "../types.js";
 import { SHEET_HEADER } from "../adapters/store/googleSheetsStore.js";
 import { absoluteHumidityGm3, dewPointF } from "../utils/psychrometrics.js";
+import { PromptAssets } from "../promptAssets.js";
 
 function toCsv(rows: string[][]): string {
   // naive CSV renderer; good enough for prompting
@@ -19,14 +20,21 @@ function toCsv(rows: string[][]): string {
     .join("\n");
 }
 
+function buildWeatherLine(weather: WeatherNow): string {
+  return `${weather.temp_f.toFixed(1)}°F, ${weather.rh_pct.toFixed(0)}% RH; wind: ${weather.wind_mph ?? "?"} mph @ ${
+    weather.wind_dir_deg ?? "?"
+  }°; precip: ${weather.precip_in_hr ?? "?"} in/hr`;
+}
+
 export function buildPrompt(params: {
   weather: WeatherNow;
   sensors: SensorsNow;
   historyRows: string[][];
   promptMaxChars?: number;
   timezone: string;
-}): string {
-  const { weather, sensors, historyRows, timezone, promptMaxChars } = params;
+  promptAssets: PromptAssets;
+}): { prompt: string; promptVersion: string; siteConfigId: string } {
+  const { weather, sensors, historyRows, timezone, promptMaxChars, promptAssets } = params;
 
   const sensorLines = sensors.readings
     .map((r) => {
@@ -34,78 +42,57 @@ export function buildPrompt(params: {
       const ah = absoluteHumidityGm3(r.temp_f, r.rh_pct);
       return `- ${r.room}: ${r.temp_f.toFixed(1)}°F, ${r.rh_pct.toFixed(
         0
-      )}% RH (dew point ~${dp.toFixed(1)}°F, abs humidity ~${ah.toFixed(
-        1
-      )} g/m³)`;
+      )}% RH (dew point ~${dp.toFixed(1)}°F, abs humidity ~${ah.toFixed(1)} g/m³)`;
     })
     .join("\n");
 
   const rowsForCsv = historyRows.length ? historyRows : [Array.from(SHEET_HEADER)];
+  const header = rowsForCsv[0] ?? [];
+  const dataRows = rowsForCsv.slice(1);
+
+  const renderWithHistory = (historyCsv: string) =>
+    promptAssets.template.render({
+      curators: promptAssets.curatorLabels,
+      site: {
+        ...promptAssets.siteConfig.site,
+        rooms: promptAssets.siteConfig.rooms
+      },
+      devices: promptAssets.siteConfig.devices,
+      runtime: {
+        timezone,
+        weatherLine: buildWeatherLine(weather),
+        sensorLines,
+        historyCsv
+      }
+    });
 
   const historyCsvFull = toCsv(rowsForCsv);
-  let historyCsv = historyCsvFull;
 
-  if (promptMaxChars && historyCsv.length > promptMaxChars) {
-    // Keep header + most recent rows until under the cap
-    const header = rowsForCsv[0] ?? [];
-    const dataRows = rowsForCsv.slice(1);
+  let chosenHistoryCsv = historyCsvFull;
+  let promptText = renderWithHistory(chosenHistoryCsv);
+
+  if (promptMaxChars && promptText.length > promptMaxChars) {
     let windowSize = dataRows.length;
     while (windowSize > 0) {
-      const candidate = toCsv([header, ...dataRows.slice(-windowSize)]);
-      if (candidate.length <= promptMaxChars) {
-        historyCsv = candidate;
+      const candidateCsv = toCsv([header, ...dataRows.slice(-windowSize)]);
+      const candidatePrompt = renderWithHistory(candidateCsv);
+      if (candidatePrompt.length <= promptMaxChars) {
+        chosenHistoryCsv = candidateCsv;
+        promptText = candidatePrompt;
         break;
       }
       windowSize = Math.max(0, windowSize - Math.ceil(windowSize / 3));
     }
-    if (historyCsv.length > promptMaxChars) {
-      historyCsv = toCsv([header]);
+    if (promptText.length > promptMaxChars) {
+      const headerOnlyCsv = toCsv([header]);
+      chosenHistoryCsv = headerOnlyCsv;
+      promptText = renderWithHistory(headerOnlyCsv);
     }
   }
 
-  return `Please role play as Gail S. Brager, Yehuda Katz, Paulus Schoutsen, Simon Willison, Stefano Schiavon, and Deborah Treisman:
-- indicate who is speaking (use labels exactly as: Gail S. Brager (imagined panel), Yehuda Katz (imagined panel), Paulus Schoutsen (imagined panel), Simon Willison (imagined panel), Stefano Schiavon (imagined panel), Deborah Treisman (imagined panel))
-- provide short notes from each speaker
-
-Important: This is an imagined panel inspired by these experts' public work. Do NOT claim to be them or to speak for them.
-
-You are deciding how to run mechanical ventilation and mixing fans in a Brooklyn apartment to maximize comfort across rooms.
-
-Apartment facts (static):
-- Address: 196 Clinton Ave, Apt D43, Brooklyn, NY 11205.
-- Steam radiators exist and are NOT controllable.
-- Vornado Transom AE fans: one in the bathroom window, one in the kitchen window. These are the only active ventilation in those rooms.
-- Vornado 630 air circulators: one on the living room floor near the steam radiator; one in the kitchen above the fridge. These are mixing fans (recirculate indoor air).
-- Bedroom has a ceiling fan (not controlled in this MVP).
-- Exterior windows: bedroom (2), bathroom (1), living room (2), kitchen (1).
-- Connectivity: Foyer connects to stairwell landing, kitchen, living room. Living room connects to back hall. Back hall connects to bathroom and bedroom.
-
-Your job each cycle:
-1) Review the current weather + sensor readings.
-2) Review the full time-series history provided.
-3) Produce:
-   - A short panel discussion with each speaker identified.
-   - A concrete action plan (device states) for this cycle.
-   - A brief hypothesis (theory of change).
-   - Confidence 0-1.
-   - Optional short predictions of what should change by next cycle.
-
-Current context:
-- Local timezone: ${timezone}
-- Outdoor now: ${weather.temp_f.toFixed(1)}°F, ${weather.rh_pct.toFixed(0)}% RH
-  wind: ${weather.wind_mph ?? "?"} mph, dir: ${weather.wind_dir_deg ?? "?"}°
-  precip: ${weather.precip_in_hr ?? "?"} in/hr
-- Indoor sensors now:
-${sensorLines}
-
-Constraints:
-- You MUST output valid JSON that matches the provided schema exactly (no extra keys, no surrounding commentary).
-- Valid Transom direction: EXHAUST or DIRECT.
-- Valid Transom speed: LOW, MED, HIGH, TURBO.
-- set_temp_f must be an integer 60-90 (meaningful when auto=true).
-- Vornado 630 plugs can only be ON or OFF.
-
-Time-series history (CSV; first row is header):
-${historyCsv}
-`;
+  return {
+    prompt: promptText,
+    promptVersion: promptAssets.template.version,
+    siteConfigId: promptAssets.siteConfig.site.id
+  };
 }

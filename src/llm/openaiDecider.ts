@@ -1,12 +1,13 @@
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { Decision } from "../types.js";
-import { DecisionSchema } from "./schema.js";
+import { buildDecisionSchema } from "./schema.js";
 
 export interface OpenAIDeciderConfig {
   apiKey: string;
   model: string;
   timeoutMs?: number;
+  curatorLabels: string[];
 }
 
 export async function decideWithOpenAI(
@@ -14,6 +15,7 @@ export async function decideWithOpenAI(
   prompt: string
 ): Promise<{ decision: Decision; responseId?: string }> {
   const client = new OpenAI({ apiKey: cfg.apiKey, timeout: cfg.timeoutMs });
+  const schema = buildDecisionSchema(cfg.curatorLabels);
 
   // Use the SDK's structured-output parsing. This enforces the Zod schema.
   const response = await client.responses.parse({
@@ -27,7 +29,7 @@ export async function decideWithOpenAI(
       { role: "user", content: prompt }
     ],
     text: {
-      format: zodTextFormat(DecisionSchema, "comfort_decision")
+      format: zodTextFormat(schema, "comfort_decision")
     },
     store: false
   });

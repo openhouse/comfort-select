@@ -11,7 +11,11 @@ const EnvSchema = z.object({
   HOME_LON: z.coerce.number(),
 
   OPENAI_API_KEY: z.string().min(1),
-  OPENAI_MODEL: z.string().default("gpt-4o-mini"),
+  OPENAI_MODEL: z.string().default("gpt-5.2"),
+
+  PROMPT_TEMPLATE_PATH: z.string().default("./config/prompt/panel.hbs"),
+  SITE_CONFIG_PATH: z.string().default("./config/sites/196-clinton.json"),
+  CURATORS_JSON: z.string().optional(),
 
   GOOGLE_SHEETS_SPREADSHEET_ID: z.string().min(1),
   GOOGLE_SHEETS_SHEET_NAME: z.string().default("TimeSeries"),

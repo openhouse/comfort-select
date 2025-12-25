@@ -78,6 +78,8 @@ export interface ActuationResult {
 export interface CycleRecord {
   decision_id: string;
   llm_model: string;
+  prompt_template_version?: string;
+  site_config_id?: string;
   timestamp_local_iso: string;
   timestamp_utc_iso: string;
 
