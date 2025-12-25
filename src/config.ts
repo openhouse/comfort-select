@@ -17,6 +17,12 @@ const EnvSchema = z.object({
   GOOGLE_SHEETS_SHEET_NAME: z.string().default("TimeSeries"),
   GOOGLE_SERVICE_ACCOUNT_JSON: z.string().min(1),
 
+  HISTORY_MODE: z.enum(["full", "window"]).default("window"),
+  HISTORY_ROWS: z.coerce.number().int().positive().default(200),
+  PROMPT_MAX_CHARS: z.coerce.number().int().positive().default(120_000),
+
+  HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+
   ECOWITT_SOURCE: z.enum(["mock", "local_gateway", "cloud_api"]).default("mock"),
   ECOWITT_GATEWAY_URL: z.string().optional(),
   ECOWITT_MAPPING_JSON: z.string().default("./config/sensors.mapping.json"),

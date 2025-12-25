@@ -59,6 +59,7 @@ export interface Decision {
   };
   hypothesis: string;
   confidence_0_1: number;
+  openai_response_id?: string;
   predictions?: Record<
     string,
     {
@@ -71,9 +72,12 @@ export interface Decision {
 export interface ActuationResult {
   applied: Decision["actions"];
   errors: string[];
+  actuation_ok: boolean;
 }
 
 export interface CycleRecord {
+  decision_id: string;
+  llm_model: string;
   timestamp_local_iso: string;
   timestamp_utc_iso: string;
 

@@ -12,7 +12,9 @@ export function startServer(params: { port: number; getLast: () => CycleRecord |
       last_cycle_utc: last?.timestamp_utc_iso ?? null,
       last_cycle_local: last?.timestamp_local_iso ?? null,
       last_confidence: last?.decision.confidence_0_1 ?? null,
-      last_actuation_errors: last?.actuation.errors ?? null
+      last_actuation_errors: last?.actuation.errors ?? null,
+      last_actuation_ok: last?.actuation.actuation_ok ?? null,
+      last_decision_id: last?.decision_id ?? null
     });
   });
 
@@ -21,6 +23,7 @@ export function startServer(params: { port: number; getLast: () => CycleRecord |
     if (!last) return res.status(404).json({ ok: false, error: "no cycles yet" });
     res.json({
       timestamp_utc: last.timestamp_utc_iso,
+      decision_id: last.decision_id,
       decision: last.decision,
       actuation: last.actuation
     });

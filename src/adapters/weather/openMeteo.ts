@@ -1,11 +1,14 @@
 import { WeatherNow } from "../../types.js";
 
+import { fetchWithTimeout } from "../../utils/fetchWithTimeout.js";
+
 export async function getWeatherNow(params: {
   lat: number;
   lon: number;
   timezone: string;
+  timeoutMs: number;
 }): Promise<WeatherNow> {
-  const { lat, lon, timezone } = params;
+  const { lat, lon, timezone, timeoutMs } = params;
 
   const url = new URL("https://api.open-meteo.com/v1/forecast");
   url.searchParams.set("latitude", String(lat));
@@ -25,7 +28,7 @@ export async function getWeatherNow(params: {
   url.searchParams.set("precipitation_unit", "inch");
   url.searchParams.set("timezone", timezone);
 
-  const resp = await fetch(url.toString());
+  const resp = await fetchWithTimeout(url.toString(), { timeoutMs });
   if (!resp.ok) throw new Error(`Open-Meteo error: ${resp.status} ${resp.statusText}`);
   const json = (await resp.json()) as any;
 
