@@ -1,81 +1,7 @@
 import { google } from "googleapis";
 import fs from "node:fs/promises";
-import { CycleRecord } from "../../types.js";
-
-export const SHEET_HEADER = [
-  "timestamp_local_iso",
-  "timestamp_utc_iso",
-
-  "outside_temp_f",
-  "outside_rh_pct",
-  "outside_wind_mph",
-  "outside_wind_dir_deg",
-  "outside_precip_in_hr",
-
-  "kitchen_temp_f",
-  "kitchen_rh_pct",
-  "living_room_temp_f",
-  "living_room_rh_pct",
-  "bedroom_temp_f",
-  "bedroom_rh_pct",
-  "bathroom_temp_f",
-  "bathroom_rh_pct",
-  "front_hall_temp_f",
-  "front_hall_rh_pct",
-  "back_hall_temp_f",
-  "back_hall_rh_pct",
-  "radiator_temp_f",
-  "radiator_rh_pct",
-
-  // requested actions
-  "kitchen_transom_power_req",
-  "kitchen_transom_direction_req",
-  "kitchen_transom_speed_req",
-  "kitchen_transom_auto_req",
-  "kitchen_transom_set_temp_f_req",
-
-  "bathroom_transom_power_req",
-  "bathroom_transom_direction_req",
-  "bathroom_transom_speed_req",
-  "bathroom_transom_auto_req",
-  "bathroom_transom_set_temp_f_req",
-
-  "kitchen_630_power_req",
-  "living_room_630_power_req",
-
-  // applied actions (post-actuation)
-  "kitchen_transom_power_applied",
-  "kitchen_transom_direction_applied",
-  "kitchen_transom_speed_applied",
-  "kitchen_transom_auto_applied",
-  "kitchen_transom_set_temp_f_applied",
-
-  "bathroom_transom_power_applied",
-  "bathroom_transom_direction_applied",
-  "bathroom_transom_speed_applied",
-  "bathroom_transom_auto_applied",
-  "bathroom_transom_set_temp_f_applied",
-
-  "kitchen_630_power_applied",
-  "living_room_630_power_applied",
-
-  // model artifacts
-  "hypothesis",
-  "panel",
-  "confidence_0_1",
-  "predictions_json",
-  "decision_json",
-  "actuation_errors_json",
-  "decision_id",
-  "llm_model",
-  "actuation_ok",
-  "sensors_raw_json",
-  "openai_response_id",
-  "prompt_template_version",
-  "site_config_id"
-] as const;
-
-export type SheetHeaderKey = (typeof SHEET_HEADER)[number];
+import { CycleRecord, Device, TelemetrySummary } from "../../types.js";
+import { SiteConfig } from "../../siteConfig.js";
 
 export interface SheetsStoreConfig {
   spreadsheetId: string;
@@ -97,6 +23,75 @@ async function getSheetsClient(serviceAccountJsonPath: string) {
   return sheets;
 }
 
+const WEATHER_COLUMNS = [
+  "weather__outside__temp_f",
+  "weather__outside__rh_pct",
+  "weather__outside__wind_mph",
+  "weather__outside__wind_dir_deg",
+  "weather__outside__precip_in_hr",
+  "weather__outside__conditions"
+];
+
+function deviceColumns(device: Device, suffix: string): string[] {
+  const cols = [`device__${device.id}__power_${suffix}`];
+  if (device.capabilities.direction_modes) {
+    cols.push(`device__${device.id}__direction_${suffix}`);
+  }
+  if (device.capabilities.speed_levels) {
+    cols.push(`device__${device.id}__speed_${suffix}`);
+  }
+  if (device.kind === "transom_fan") {
+    cols.push(`device__${device.id}__auto_${suffix}`, `device__${device.id}__set_temp_f_${suffix}`);
+  }
+  return cols;
+}
+
+export function buildSheetHeader(siteConfig: SiteConfig): string[] {
+  const header: string[] = ["timestamp_local_iso", "timestamp_utc_iso", ...WEATHER_COLUMNS];
+
+  siteConfig.sensors.forEach((sensor) => {
+    header.push(`temp_f__${sensor.id}`, `rh__${sensor.id}`);
+  });
+
+  siteConfig.rooms
+    .filter((room) => !room.exterior)
+    .forEach((room) => {
+      header.push(`temp_f_mean__${room.id}`, `rh_mean__${room.id}`);
+    });
+
+  (siteConfig.features ?? []).forEach((feature) => {
+    header.push(`feature__${feature.id}`);
+  });
+
+  siteConfig.devices.forEach((device) => {
+    header.push(...deviceColumns(device, "req"));
+  });
+
+  siteConfig.devices.forEach((device) => {
+    header.push(...deviceColumns(device, "applied"));
+  });
+
+  header.push(
+    "hypothesis",
+    "confidence_0_1",
+    "panel_json",
+    "panel_text",
+    "predictions_json",
+    "decision_json",
+    "actuation_errors_json",
+    "decision_id",
+    "llm_model",
+    "actuation_ok",
+    "sensors_raw_json",
+    "features_json",
+    "openai_response_id",
+    "prompt_template_version",
+    "site_config_id"
+  );
+
+  return header;
+}
+
 export async function readAllRows(cfg: SheetsStoreConfig): Promise<string[][]> {
   const sheets = await getSheetsClient(cfg.serviceAccountJsonPath);
   const range = `${cfg.sheetName}!A:ZZ`;
@@ -110,21 +105,17 @@ export async function readAllRows(cfg: SheetsStoreConfig): Promise<string[][]> {
   return values as string[][];
 }
 
-export async function ensureHeaderRow(cfg: SheetsStoreConfig): Promise<void> {
+export async function ensureHeaderRow(cfg: SheetsStoreConfig, header: string[]): Promise<void> {
   const rows = await readAllRows(cfg);
   if (rows.length === 0) {
-    await appendRow(cfg, SHEET_HEADER as unknown as string[]);
+    await appendRow(cfg, header as unknown as string[]);
     return;
   }
   const first = rows[0] ?? [];
-  const matches =
-    first.length >= SHEET_HEADER.length &&
-    SHEET_HEADER.every((h, i) => first[i] === h);
+  const matches = first.length >= header.length && header.every((h, i) => first[i] === h);
 
   if (!matches) {
-    throw new Error(
-      `Sheet header row mismatch. Expected first row to match SHEET_HEADER (${SHEET_HEADER.length} cols).`
-    );
+    throw new Error(`Sheet header row mismatch. Expected first row to match generated header (${header.length} cols).`);
   }
 }
 
@@ -139,97 +130,97 @@ export async function appendRow(cfg: SheetsStoreConfig, row: (string | number | 
   });
 }
 
-function pickRoom(readings: { room: string; temp_f: number; rh_pct: number }[], room: string) {
-  const r = readings.find((x) => x.room === room);
-  return r ? { temp_f: r.temp_f, rh_pct: r.rh_pct } : { temp_f: "", rh_pct: "" };
+function pickSensor(
+  rec: CycleRecord,
+  sensorId: string
+): { temp_f: number | string; rh_pct: number | string } {
+  const found = rec.sensors.readings.find((r) => r.sensorId === sensorId);
+  if (!found) return { temp_f: "", rh_pct: "" };
+  return { temp_f: found.temp_f, rh_pct: found.rh_pct };
 }
 
-export function cycleRecordToRow(rec: CycleRecord): (string | number | boolean)[] {
-  const w = rec.weather;
-  const s = rec.sensors.readings;
+function pickRoomStats(
+  telemetry: TelemetrySummary,
+  roomId: string
+): { temp_mean: number | string; rh_mean: number | string } {
+  const room = telemetry.rooms.find((r) => r.roomId === roomId);
+  return {
+    temp_mean: room?.stats?.temp_f?.mean ?? "",
+    rh_mean: room?.stats?.rh_pct?.mean ?? ""
+  };
+}
 
-  const k = pickRoom(s, "kitchen");
-  const lr = pickRoom(s, "living_room");
-  const br = pickRoom(s, "bedroom");
-  const ba = pickRoom(s, "bathroom");
-  const fh = pickRoom(s, "front_hall");
-  const bh = pickRoom(s, "back_hall");
-  const rad = pickRoom(s, "radiator");
+function flattenDeviceState(device: Device, state: any, suffix: string, into: Record<string, any>) {
+  const base = `device__${device.id}`;
+  into[`${base}__power_${suffix}`] = state?.power ?? "";
+  if (device.capabilities.direction_modes) {
+    into[`${base}__direction_${suffix}`] = state?.direction ?? "";
+  }
+  if (device.capabilities.speed_levels) {
+    into[`${base}__speed_${suffix}`] = state?.speed ?? "";
+  }
+  if (device.kind === "transom_fan") {
+    into[`${base}__auto_${suffix}`] = state?.auto ?? "";
+    into[`${base}__set_temp_f_${suffix}`] = state?.set_temp_f ?? "";
+  }
+}
 
-  const req = rec.decision.actions;
-  const app = rec.actuation.applied;
+export function cycleRecordToRow(rec: CycleRecord, siteConfig: SiteConfig, header: string[]): (string | number | boolean)[] {
+  const values: Record<string, string | number | boolean> = {
+    timestamp_local_iso: rec.timestamp_local_iso,
+    timestamp_utc_iso: rec.timestamp_utc_iso,
+    weather__outside__temp_f: rec.weather.temp_f,
+    weather__outside__rh_pct: rec.weather.rh_pct,
+    weather__outside__wind_mph: rec.weather.wind_mph ?? "",
+    weather__outside__wind_dir_deg: rec.weather.wind_dir_deg ?? "",
+    weather__outside__precip_in_hr: rec.weather.precip_in_hr ?? "",
+    weather__outside__conditions: rec.weather.conditions ?? ""
+  };
+
+  siteConfig.sensors.forEach((sensor) => {
+    const reading = pickSensor(rec, sensor.id);
+    values[`temp_f__${sensor.id}`] = reading.temp_f;
+    values[`rh__${sensor.id}`] = reading.rh_pct;
+  });
+
+  siteConfig.rooms
+    .filter((room) => !room.exterior)
+    .forEach((room) => {
+      const stats = pickRoomStats(rec.telemetry, room.id);
+      values[`temp_f_mean__${room.id}`] = stats.temp_mean;
+      values[`rh_mean__${room.id}`] = stats.rh_mean;
+    });
+
+  (siteConfig.features ?? []).forEach((feature) => {
+    values[`feature__${feature.id}`] = rec.features?.[feature.id] ?? "";
+  });
+
+  siteConfig.devices.forEach((device) => {
+    flattenDeviceState(device, rec.decision.actions[device.id as keyof typeof rec.decision.actions], "req", values);
+  });
+  siteConfig.devices.forEach((device) => {
+    flattenDeviceState(device, rec.actuation.applied[device.id as keyof typeof rec.actuation.applied], "applied", values);
+  });
 
   const panelText = rec.decision.panel
-    .map((p) => `${p.speaker}: ${p.say}`.replace(/\s+/g, " ").trim())
+    .map((p) => `${p.speaker}: ${p.notes}`.replace(/\s+/g, " ").trim())
     .join("\n\n");
 
-  return [
-    rec.timestamp_local_iso,
-    rec.timestamp_utc_iso,
+  values.hypothesis = rec.decision.hypothesis;
+  values.confidence_0_1 = rec.decision.confidence_0_1;
+  values.panel_json = JSON.stringify(rec.decision.panel ?? []);
+  values.panel_text = panelText;
+  values.predictions_json = JSON.stringify(rec.decision.predictions ?? {});
+  values.decision_json = JSON.stringify(rec.decision);
+  values.actuation_errors_json = JSON.stringify(rec.actuation.errors);
+  values.decision_id = rec.decision_id;
+  values.llm_model = rec.llm_model;
+  values.actuation_ok = rec.actuation.actuation_ok;
+  values.sensors_raw_json = JSON.stringify(rec.sensors.raw ?? {});
+  values.features_json = JSON.stringify(rec.features ?? {});
+  values.openai_response_id = rec.decision.openai_response_id ?? "";
+  values.prompt_template_version = rec.prompt_template_version ?? "";
+  values.site_config_id = rec.site_config_id ?? "";
 
-    w.temp_f,
-    w.rh_pct,
-    w.wind_mph ?? "",
-    w.wind_dir_deg ?? "",
-    w.precip_in_hr ?? "",
-
-    k.temp_f,
-    k.rh_pct,
-    lr.temp_f,
-    lr.rh_pct,
-    br.temp_f,
-    br.rh_pct,
-    ba.temp_f,
-    ba.rh_pct,
-    fh.temp_f,
-    fh.rh_pct,
-    bh.temp_f,
-    bh.rh_pct,
-    rad.temp_f,
-    rad.rh_pct,
-
-    req.kitchen_transom.power,
-    req.kitchen_transom.direction,
-    req.kitchen_transom.speed,
-    req.kitchen_transom.auto,
-    req.kitchen_transom.set_temp_f,
-
-    req.bathroom_transom.power,
-    req.bathroom_transom.direction,
-    req.bathroom_transom.speed,
-    req.bathroom_transom.auto,
-    req.bathroom_transom.set_temp_f,
-
-    req.kitchen_630_plug.power,
-    req.living_room_630_plug.power,
-
-    app.kitchen_transom.power,
-    app.kitchen_transom.direction,
-    app.kitchen_transom.speed,
-    app.kitchen_transom.auto,
-    app.kitchen_transom.set_temp_f,
-
-    app.bathroom_transom.power,
-    app.bathroom_transom.direction,
-    app.bathroom_transom.speed,
-    app.bathroom_transom.auto,
-    app.bathroom_transom.set_temp_f,
-
-    app.kitchen_630_plug.power,
-    app.living_room_630_plug.power,
-
-    rec.decision.hypothesis,
-    panelText,
-    rec.decision.confidence_0_1,
-    JSON.stringify(rec.decision.predictions ?? {}),
-    JSON.stringify(rec.decision),
-    JSON.stringify(rec.actuation.errors),
-    rec.decision_id,
-    rec.llm_model,
-    rec.actuation.actuation_ok,
-    JSON.stringify(rec.sensors.raw ?? {}),
-    rec.decision.openai_response_id ?? "",
-    rec.prompt_template_version ?? "",
-    rec.site_config_id ?? ""
-  ];
+  return header.map((key) => values[key] ?? "");
 }

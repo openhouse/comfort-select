@@ -15,23 +15,28 @@ export const PlugStateSchema = z.object({
   power: z.enum(["ON", "OFF"])
 });
 
-const PanelUtteranceSchemaFactory = (speakers: string[]) => {
+const PanelNoteSchemaFactory = (speakers: string[]) => {
   const speakerSchema = speakers.length > 0 ? z.enum(speakers as [string, ...string[]]) : z.string().min(1);
 
   return z.object({
     speaker: speakerSchema,
-    say: z.string().min(1)
+    notes: z.string().min(1)
   });
 };
 
-export const buildDecisionSchema = (curatorLabels: string[]) =>
-  z.object({
-    panel: z.array(PanelUtteranceSchemaFactory(curatorLabels)).min(1),
+export const buildDecisionSchema = (curatorLabels: string[]) => {
+  const panelSchema =
+    curatorLabels.length > 0
+      ? z.array(PanelNoteSchemaFactory(curatorLabels)).length(curatorLabels.length)
+      : z.array(PanelNoteSchemaFactory(curatorLabels)).min(1);
+
+  return z.object({
+    panel: panelSchema,
     actions: z.object({
       kitchen_transom: TransomStateSchema,
       bathroom_transom: TransomStateSchema,
-      kitchen_630_plug: PlugStateSchema,
-      living_room_630_plug: PlugStateSchema
+      kitchen_vornado_630: PlugStateSchema,
+      living_vornado_630: PlugStateSchema
     }),
     hypothesis: z.string().min(1),
     confidence_0_1: z.number().min(0).max(1),
@@ -45,6 +50,7 @@ export const buildDecisionSchema = (curatorLabels: string[]) =>
       )
       .optional()
   });
+};
 
 export const DecisionSchema = buildDecisionSchema([]);
 export type DecisionZod = z.infer<typeof DecisionSchema>;

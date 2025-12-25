@@ -3,7 +3,8 @@ import { loadPromptAssetsFromConfig } from "../src/promptAssets.js";
 import { buildPrompt } from "../src/llm/prompt.js";
 import { getSensorsNowFromMock } from "../src/adapters/sensors/ecowittLocal.js";
 import { getWeatherNow } from "../src/adapters/weather/openMeteo.js";
-import { SHEET_HEADER } from "../src/adapters/store/googleSheetsStore.js";
+import { buildSheetHeader } from "../src/adapters/store/googleSheetsStore.js";
+import { summarizeTelemetry } from "../src/utils/telemetry.js";
 
 const cfg = loadConfig();
 const promptAssets = loadPromptAssetsFromConfig(cfg);
@@ -33,10 +34,15 @@ try {
   };
 }
 
+const sheetHeader = buildSheetHeader(promptAssets.siteConfig);
+const telemetry = summarizeTelemetry(promptAssets.siteConfig, sensors);
+
 const { prompt } = buildPrompt({
   weather: weather,
   sensors,
-  historyRows: [Array.from(SHEET_HEADER)],
+  telemetry,
+  features: telemetry.features,
+  historyRows: [Array.from(sheetHeader)],
   timezone: promptAssets.siteConfig.site.timezone ?? cfg.TIMEZONE,
   promptMaxChars: cfg.PROMPT_MAX_CHARS,
   promptAssets

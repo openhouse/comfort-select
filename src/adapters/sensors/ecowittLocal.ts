@@ -1,22 +1,14 @@
 import fs from "node:fs/promises";
-import { SensorsNow, RoomReading } from "../../types.js";
+import { SensorReading, SensorsNow } from "../../types.js";
 import { fetchWithTimeout } from "../../utils/fetchWithTimeout.js";
 
 type MappingEntry = {
-  id:
-    | "kitchen"
-    | "living_room"
-    | "bedroom"
-    | "bathroom"
-    | "front_hall"
-    | "back_hall"
-    | "radiator";
-  label: string;
+  id: string;
   tempKey: string;
   humidityKey: string;
 };
 
-type MappingFile = { rooms: MappingEntry[] };
+type MappingFile = { sensors: MappingEntry[] };
 
 async function loadMapping(path: string): Promise<MappingFile> {
   const raw = await fs.readFile(path, "utf-8");
@@ -46,10 +38,10 @@ export async function getSensorsNowFromLocalGateway(params: {
 
   // Many gateways return different shapes. This MVP expects flat keys as configured in mapping.
   // If your payload differs, update `config/sensors.mapping.json` to match your gateway keys.
-  const readings: RoomReading[] = mapping.rooms.map((r) => {
+  const readings: SensorReading[] = mapping.sensors.map((r) => {
     const temp = coerceNumber(json[r.tempKey]);
     const rh = coerceNumber(json[r.humidityKey]);
-    return { room: r.id, temp_f: temp, rh_pct: rh };
+    return { sensorId: r.id, temp_f: temp, rh_pct: rh };
   });
 
   return {
@@ -67,10 +59,10 @@ export async function getSensorsNowFromMock(params: {
   const raw = await fs.readFile(params.mockPath, "utf-8");
   const json = JSON.parse(raw) as any;
 
-  const readings: RoomReading[] = mapping.rooms.map((r) => {
+  const readings: SensorReading[] = mapping.sensors.map((r) => {
     const temp = coerceNumber(json[r.tempKey]);
     const rh = coerceNumber(json[r.humidityKey]);
-    return { room: r.id, temp_f: temp, rh_pct: rh };
+    return { sensorId: r.id, temp_f: temp, rh_pct: rh };
   });
 
   return {

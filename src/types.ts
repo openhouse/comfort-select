@@ -1,11 +1,82 @@
-export type RoomId =
-  | "kitchen"
-  | "living_room"
-  | "bedroom"
-  | "bathroom"
-  | "front_hall"
-  | "back_hall"
-  | "radiator";
+export type SensorRole = "ambient" | "radiator_proximity" | "window_proximity" | "unknown";
+
+export interface RoomDimensionsFt {
+  length_ft?: number;
+  width_ft?: number;
+  height_ft?: number;
+  notes?: string;
+}
+
+export interface RoomIrregularity {
+  description: string;
+  size_ft?: {
+    length_ft?: number;
+    width_ft?: number;
+    height_ft?: number;
+  };
+}
+
+export interface Room {
+  id: string;
+  name: string;
+  kind: string;
+  dimensions_ft?: RoomDimensionsFt;
+  irregularities?: RoomIrregularity[];
+  windows?: {
+    count: number;
+    notes?: string;
+  };
+  connected_room_ids?: string[];
+  notes?: string[];
+  tags?: string[];
+  exterior?: boolean;
+}
+
+export interface RoomConnection {
+  from: string;
+  to: string;
+  kind?: string;
+  notes?: string;
+}
+
+export interface Sensor {
+  id: string;
+  name: string;
+  room_id: string;
+  role?: SensorRole;
+  placement_notes?: string;
+  measures?: string[];
+  is_primary_for_room?: boolean;
+  tags?: string[];
+  manufacturer?: string;
+}
+
+export interface DeviceCapabilities {
+  power: boolean;
+  direction_modes?: string[];
+  speed_levels?: number[];
+  power_only?: boolean;
+  constraints?: string[];
+}
+
+export interface Device {
+  id: string;
+  name: string;
+  room_id: string;
+  kind: string;
+  control: "alexa" | "meross" | string;
+  capabilities: DeviceCapabilities;
+  placement_notes?: string;
+  notes?: string[];
+}
+
+export interface SiteFeature {
+  id: string;
+  description: string;
+  sensors?: string[];
+  rooms?: string[];
+  formula?: string;
+}
 
 export interface WeatherNow {
   temp_f: number;
@@ -17,16 +88,55 @@ export interface WeatherNow {
   observation_time_utc: string;
 }
 
-export interface RoomReading {
-  room: RoomId;
+export interface SensorsNow {
+  observation_time_utc: string;
+  readings: SensorReading[];
+  raw?: unknown;
+}
+
+export interface SensorReading {
+  sensorId: string;
   temp_f: number;
   rh_pct: number;
 }
 
-export interface SensorsNow {
-  observation_time_utc: string;
-  readings: RoomReading[];
-  raw?: unknown;
+export interface SensorWithReading {
+  sensorId: string;
+  sensor?: Sensor;
+  reading?: SensorReading;
+}
+
+export interface StatSummary {
+  min?: number;
+  max?: number;
+  mean?: number;
+  count: number;
+}
+
+export interface RoomTelemetry {
+  roomId: string;
+  room?: Room;
+  sensors: SensorWithReading[];
+  stats?: {
+    temp_f?: StatSummary;
+    rh_pct?: StatSummary;
+  };
+  representative?: {
+    sensorId?: string;
+    temp_f?: number;
+    rh_pct?: number;
+    method: string;
+  };
+}
+
+export interface DerivedFeatures {
+  living_radiator_delta_f?: number | null;
+  [key: string]: number | null | undefined;
+}
+
+export interface TelemetrySummary {
+  rooms: RoomTelemetry[];
+  features: DerivedFeatures;
 }
 
 export type TransomDirection = "EXHAUST" | "DIRECT";
@@ -44,18 +154,18 @@ export interface PlugState {
   power: "ON" | "OFF";
 }
 
-export interface DecisionPanelUtterance {
-  speaker: string; // e.g. "Gail S. Brager (imagined panel)"
-  say: string;
+export interface DecisionPanelNote {
+  speaker: string;
+  notes: string;
 }
 
 export interface Decision {
-  panel: DecisionPanelUtterance[];
+  panel: DecisionPanelNote[];
   actions: {
     kitchen_transom: TransomState;
     bathroom_transom: TransomState;
-    kitchen_630_plug: PlugState;
-    living_room_630_plug: PlugState;
+    kitchen_vornado_630: PlugState;
+    living_vornado_630: PlugState;
   };
   hypothesis: string;
   confidence_0_1: number;
@@ -85,6 +195,8 @@ export interface CycleRecord {
 
   weather: WeatherNow;
   sensors: SensorsNow;
+  telemetry: TelemetrySummary;
+  features: DerivedFeatures;
 
   decision: Decision;
   actuation: ActuationResult;

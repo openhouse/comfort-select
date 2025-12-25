@@ -13,18 +13,27 @@ import {
   appendRow,
   ensureHeaderRow,
   cycleRecordToRow,
-  readAllRows
+  readAllRows,
+  buildSheetHeader
 } from "./adapters/store/googleSheetsStore.js";
 import { buildPrompt } from "./llm/prompt.js";
 import { decideWithOpenAI } from "./llm/openaiDecider.js";
 import { applySanity } from "./policy/sanity.js";
 import { setTransomState } from "./adapters/actuators/alexaWebhook.js";
 import { setPlugState } from "./adapters/actuators/merossWebhook.js";
-import { ActuationResult, CycleRecord, Decision, SensorsNow, WeatherNow } from "./types.js";
+import {
+  ActuationResult,
+  CycleRecord,
+  Decision,
+  SensorsNow,
+  WeatherNow
+} from "./types.js";
+import { summarizeTelemetry } from "./utils/telemetry.js";
 
-function noopDecision(reason: string): Decision {
+function noopDecision(reason: string, speakers: string[]): Decision {
+  const panel = speakers.length > 0 ? speakers : ["System (fallback)"];
   return {
-    panel: [{ speaker: "System (fallback)", say: reason }],
+    panel: panel.map((speaker) => ({ speaker, notes: reason })),
     actions: {
       kitchen_transom: {
         power: "OFF",
@@ -40,8 +49,8 @@ function noopDecision(reason: string): Decision {
         auto: false,
         set_temp_f: 70
       },
-      kitchen_630_plug: { power: "OFF" },
-      living_room_630_plug: { power: "OFF" }
+      kitchen_vornado_630: { power: "OFF" },
+      living_vornado_630: { power: "OFF" }
     },
     hypothesis: `Fallback no-op decision due to error: ${reason}`,
     confidence_0_1: 0
@@ -93,10 +102,10 @@ async function actuate(cfg: AppConfig, decision: Decision, decisionId: string): 
         dryRun: false,
         timeoutMs: cfg.HTTP_TIMEOUT_MS
       },
-      { plug: "kitchen_630_plug", state: decision.actions.kitchen_630_plug, decisionId }
+      { plug: "kitchen_vornado_630", state: decision.actions.kitchen_vornado_630, decisionId }
     );
   } catch (e: any) {
-    errors.push(`kitchen_630_plug: ${e?.message ?? String(e)}`);
+    errors.push(`kitchen_vornado_630: ${e?.message ?? String(e)}`);
   }
   try {
     await setPlugState(
@@ -106,10 +115,10 @@ async function actuate(cfg: AppConfig, decision: Decision, decisionId: string): 
         dryRun: false,
         timeoutMs: cfg.HTTP_TIMEOUT_MS
       },
-      { plug: "living_room_630_plug", state: decision.actions.living_room_630_plug, decisionId }
+      { plug: "living_vornado_630", state: decision.actions.living_vornado_630, decisionId }
     );
   } catch (e: any) {
-    errors.push(`living_room_630_plug: ${e?.message ?? String(e)}`);
+    errors.push(`living_vornado_630: ${e?.message ?? String(e)}`);
   }
 
   return { applied, errors, actuation_ok: errors.length === 0 };
@@ -138,6 +147,7 @@ function fallbackSensors(reason: string): SensorsNow {
 export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): Promise<CycleRecord> {
   const decision_id = `decision_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   const siteTimezone = promptAssets.siteConfig.site.timezone ?? cfg.TIMEZONE;
+  const sheetHeader = buildSheetHeader(promptAssets.siteConfig);
   const timestamp_utc_iso = nowUtcIso();
   const timestamp_local_iso = nowLocalIso(siteTimezone);
 
@@ -154,9 +164,10 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
 
   let weather: WeatherNow | null = null;
   try {
+    const loc = promptAssets.siteConfig.site.location;
     weather = await getWeatherNow({
-      lat: cfg.HOME_LAT,
-      lon: cfg.HOME_LON,
+      lat: loc?.lat ?? cfg.HOME_LAT,
+      lon: loc?.lon ?? cfg.HOME_LON,
       timezone: siteTimezone,
       timeoutMs: cfg.HTTP_TIMEOUT_MS
     });
@@ -200,10 +211,13 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
     sensors = fallbackSensors(msg);
   }
 
+  const telemetry = summarizeTelemetry(promptAssets.siteConfig, sensors!);
+  const features = telemetry.features;
+
   let headerReady = false;
   let historyRows: string[][] = [];
   try {
-    await ensureHeaderRow(sheetsCfg);
+    await ensureHeaderRow(sheetsCfg, sheetHeader);
     headerReady = true;
     historyRows = await readAllRows(sheetsCfg);
   } catch (e: any) {
@@ -212,16 +226,19 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
     blockingErrors.push(msg);
   }
 
+  const historyRowsWithHeader = historyRows.length === 0 ? [sheetHeader] : historyRows;
   const historyForPrompt =
     cfg.HISTORY_MODE === "full"
-      ? historyRows
-      : historyRows.length <= 1
-        ? historyRows
-        : [historyRows[0], ...historyRows.slice(-cfg.HISTORY_ROWS)];
+      ? historyRowsWithHeader
+      : historyRowsWithHeader.length <= 1
+        ? historyRowsWithHeader
+        : [historyRowsWithHeader[0], ...historyRowsWithHeader.slice(-cfg.HISTORY_ROWS)];
 
   const { prompt, promptVersion, siteConfigId } = buildPrompt({
     weather: weather!,
     sensors: sensors!,
+    telemetry,
+    features,
     historyRows: historyForPrompt,
     timezone: siteTimezone,
     promptMaxChars: cfg.PROMPT_MAX_CHARS,
@@ -231,7 +248,7 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
   const decisionErrors: string[] = [];
   let decision: Decision;
   if (blockingErrors.length > 0) {
-    decision = noopDecision(blockingErrors.join("; "));
+    decision = noopDecision(blockingErrors.join("; "), promptAssets.curatorLabels);
   } else {
     try {
       const { decision: llmDecision, responseId } = await decideWithOpenAI(
@@ -247,7 +264,7 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
     } catch (e: any) {
       logger.error({ err: e }, "OpenAI decision failed");
       decisionErrors.push(e?.message ?? String(e));
-      decision = noopDecision(e?.message ?? String(e));
+      decision = noopDecision(e?.message ?? String(e), promptAssets.curatorLabels);
     }
   }
 
@@ -270,13 +287,15 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
     site_config_id: siteConfigId,
     weather: weather!,
     sensors: sensors!,
+    telemetry,
+    features,
     decision,
     actuation
   };
 
   if (headerReady) {
     try {
-      await appendRow(sheetsCfg, cycleRecordToRow(record));
+      await appendRow(sheetsCfg, cycleRecordToRow(record, promptAssets.siteConfig, sheetHeader));
     } catch (e: any) {
       logger.error({ err: e }, "Failed to append to Google Sheet");
       // Keep record for observability even if sheet write fails.

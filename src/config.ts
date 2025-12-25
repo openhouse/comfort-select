@@ -13,8 +13,8 @@ const EnvSchema = z.object({
   OPENAI_API_KEY: z.string().min(1),
   OPENAI_MODEL: z.string().default("gpt-5.2"),
 
-  PROMPT_TEMPLATE_PATH: z.string().default("./config/prompt/panel.hbs"),
-  SITE_CONFIG_PATH: z.string().default("./config/sites/196-clinton.json"),
+  PROMPT_TEMPLATE_PATH: z.string().default("./config/prompt/llm-prompt-template.md.hbs"),
+  SITE_CONFIG_PATH: z.string().default("./config/site.config.json"),
   CURATORS_JSON: z.string().optional(),
 
   GOOGLE_SHEETS_SPREADSHEET_ID: z.string().min(1),

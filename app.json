@@ -18,11 +18,11 @@
     },
     "HOME_LAT": {
       "description": "Latitude",
-      "value": "40.6897"
+      "value": "40.692"
     },
     "HOME_LON": {
       "description": "Longitude",
-      "value": "-73.9635"
+      "value": "-73.969306"
     },
     "OPENAI_API_KEY": {
       "description": "OpenAI API key"
@@ -33,11 +33,11 @@
     },
     "PROMPT_TEMPLATE_PATH": {
       "description": "Path to Handlebars prompt template",
-      "value": "./config/prompt/panel.hbs"
+      "value": "./config/prompt/llm-prompt-template.md.hbs"
     },
     "SITE_CONFIG_PATH": {
       "description": "Path to site JSON config",
-      "value": "./config/sites/196-clinton.json"
+      "value": "./config/site.config.json"
     },
     "CURATORS_JSON": {
       "description": "Optional JSON array string overriding curators"
