@@ -2,7 +2,7 @@
 
 A Node/TypeScript service that runs every **N minutes** to:
 1) fetch outdoor weather for 196 Clinton Ave, Brooklyn, NY 11205  
-2) fetch indoor temperature/humidity from Ecowitt sensors (6 rooms + radiator-adjacent sensor)  
+2) fetch indoor temperature/humidity from Ecowitt sensors (per-sensor logging; living room has ambient + radiator-proximate)  
 3) read the full Google Sheets time-series history  
 4) call the OpenAI API with a dynamic prompt (panel-style “expert perspectives” + structured output)  
 5) actuate:
@@ -28,8 +28,8 @@ Edit `.env`:
 * Google Sheets: `GOOGLE_SHEETS_SPREADSHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`
 * Prompt + site configuration:
   * `OPENAI_MODEL` (default `gpt-5.2`)
-  * `PROMPT_TEMPLATE_PATH` (default `./config/prompt/panel.hbs`)
-  * `SITE_CONFIG_PATH` (default `./config/sites/196-clinton.json`)
+  * `PROMPT_TEMPLATE_PATH` (default `./config/prompt/llm-prompt-template.md.hbs`)
+  * `SITE_CONFIG_PATH` (default `./config/site.config.json`)
   * Optional: `CURATORS_JSON` (JSON array string to override curators; defaults to site config)
 * Pick sensor source:
 
@@ -73,8 +73,8 @@ Open [http://localhost:3000/healthz](http://localhost:3000/healthz) to see cycle
 
 The LLM prompt is rendered from a Handlebars template and a site JSON config:
 
-* Template: `config/prompt/panel.hbs` (override with `PROMPT_TEMPLATE_PATH`)
-* Site config: `config/sites/196-clinton.json` (override with `SITE_CONFIG_PATH`)
+* Template: `config/prompt/llm-prompt-template.md.hbs` (override with `PROMPT_TEMPLATE_PATH`)
+* Site config: `config/site.config.json` (override with `SITE_CONFIG_PATH`)
 * Curators: defaults come from the site config, but you can override via `CURATORS_JSON` env
 * Dev helper: `npm run print-prompt` renders the current prompt using mock sensors + live weather (falls back to a stub if unavailable)
 
@@ -92,10 +92,8 @@ match the expected columns it will block actuation and surface an error.
 * **Sheet header migrations**: the header now includes observability columns (`decision_id`, `llm_model`,
   `actuation_ok`, `sensors_raw_json`, optional `openai_response_id`, `prompt_template_version`, `site_config_id`).
   If your existing tab was created before this change, create a fresh tab or update the header row to
-  exactly match `SHEET_HEADER` (see `src/adapters/store/googleSheetsStore.ts`). A mismatch will cause
+  exactly match the generated header (see `buildSheetHeader` in `src/adapters/store/googleSheetsStore.ts`). A mismatch will cause
   cycles to skip actuation.
-* **Radiator sensor naming**: the Ecowitt mapping keeps the id `radiator` but represents the *Living
-  Room Radiator (behind)* sensor. Adjust your analytics accordingly.
 
 ## Actuation adapters (MVP)
 
@@ -127,7 +125,7 @@ dokku config:set comfort-196 \
   OPENAI_API_KEY=... \
   GOOGLE_SHEETS_SPREADSHEET_ID=... \
   GOOGLE_SHEETS_SHEET_NAME=TimeSeries \
-  HOME_LAT=40.6897 HOME_LON=-73.9635 \
+  HOME_LAT=40.692 HOME_LON=-73.969306 \
   CYCLE_MINUTES=5 TIMEZONE=America/New_York \
   DRY_RUN=true
 ```

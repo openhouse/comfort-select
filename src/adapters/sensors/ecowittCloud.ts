@@ -1,23 +1,15 @@
 import fs from "node:fs/promises";
-import { SensorsNow, RoomReading } from "../../types.js";
+import { SensorReading, SensorsNow } from "../../types.js";
 import { logger } from "../../utils/logger.js";
 import { fetchWithTimeout } from "../../utils/fetchWithTimeout.js";
 
 type MappingEntry = {
-  id:
-    | "kitchen"
-    | "living_room"
-    | "bedroom"
-    | "bathroom"
-    | "front_hall"
-    | "back_hall"
-    | "radiator";
-  label: string;
+  id: string;
   tempKey: string;
   humidityKey: string;
 };
 
-type MappingFile = { rooms: MappingEntry[] };
+type MappingFile = { sensors: MappingEntry[] };
 
 function coerceNumber(v: unknown): number {
   if (typeof v === "number") return v;
@@ -145,7 +137,7 @@ export async function getSensorsNowFromCloud(params: {
 
   const dataRoot = payload?.data ?? payload;
 
-  const readings: RoomReading[] = mapping.rooms.map((r) => {
+  const readings: SensorReading[] = mapping.sensors.map((r) => {
     const tempVal = findValue(dataRoot, r.tempKey);
     const rhVal = findValue(dataRoot, r.humidityKey);
     if (tempVal === undefined || rhVal === undefined) {
@@ -153,7 +145,7 @@ export async function getSensorsNowFromCloud(params: {
         `Ecowitt Cloud payload missing keys for ${r.id}: tempKey=${r.tempKey}, humidityKey=${r.humidityKey}`
       );
     }
-    return { room: r.id, temp_f: coerceNumber(tempVal), rh_pct: coerceNumber(rhVal) };
+    return { sensorId: r.id, temp_f: coerceNumber(tempVal), rh_pct: coerceNumber(rhVal) };
   });
 
   return {

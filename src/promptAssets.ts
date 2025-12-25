@@ -21,7 +21,7 @@ export function loadPromptAssets(params: {
 
   const template = loadPromptTemplate(params.promptTemplatePath);
 
-  const curatorLabels = curators.map((name) => `${name} (imagined panel)`);
+  const curatorLabels = curators.map((name) => `${name}`);
 
   return {
     siteConfig: { ...siteConfig, curators },

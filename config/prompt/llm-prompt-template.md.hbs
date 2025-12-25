@@ -1,0 +1,107 @@
+## Role-play as a panel of building science + control experts
+
+{{#each curators}}- {{this}}{{/each}}
+
+Provide short, high-signal notes for each speaker (field: `panel[]` -> `{ speaker, notes }`), then decide device states.
+
+---
+
+# AS-BUILT CONTEXT (static)
+
+- Address: {{site.address}}
+- Timezone: {{runtime.timezone}}
+- Materials: {{#if site.materials}}{{#each site.materials}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{else}}(unspecified){{/if}}
+- Notes: {{#if site.notes}}{{#each site.notes}}{{this}}{{#unless @last}}; {{/unless}}{{/each}}{{else}}(none){{/if}}
+- Windows by room:
+  {{#each rooms}}- {{this.id}}: {{#if this.windows}}{{this.windows.count}} exterior{{#if this.windows.notes}} ({{this.windows.notes}}){{/if}}{{else}}0{{/if}}
+  {{/each}}
+- Kitchen + bathroom have **no other built-in exhaust** besides their window transom fans.
+- Front hall/foyer connects to the stair landing (potential infiltration/make-up air path).
+
+### Rooms & dimensions
+{{#each rooms}}- {{this.id}} ({{this.kind}}): {{this.name}}; dims ~{{#if this.dimensions_ft.length_ft}}{{this.dimensions_ft.length_ft}}'{{else}}?{{/if}} x {{#if this.dimensions_ft.width_ft}}{{this.dimensions_ft.width_ft}}'{{else}}?{{/if}} x {{#if this.dimensions_ft.height_ft}}{{this.dimensions_ft.height_ft}}'{{else}}?{{/if}}{{#if this.irregularities}}; irregularities: {{#each this.irregularities}}{{this.description}}{{#unless @last}}; {{/unless}}{{/each}}{{/if}}{{#if this.notes}}; notes: {{#each this.notes}}{{this}}{{#unless @last}}; {{/unless}}{{/each}}{{/if}}
+{{/each}}
+
+### Connectivity graph (adjacency list)
+{{#each adjacency}}- {{@key}} <-> {{#each this}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
+{{/each}}
+
+### Sensors by room
+{{#each sensorsByRoom}}- {{this.room.id}}:
+  {{#if this.sensors.length}}
+    {{#each this.sensors}}  - {{this.sensor.id}} ({{this.sensor.role}}) in {{../room.name}} — placement: {{this.sensor.placement_notes}}{{#if this.sensor.is_primary_for_room}} (primary for room){{/if}}
+    {{/each}}
+  {{else}}  - (no sensors defined)
+  {{/if}}
+{{/each}}
+
+### Devices by room
+{{#each devicesByRoom}}- {{this.room.id}}:
+  {{#if this.devices.length}}
+    {{#each this.devices}}  - {{this.id}} ({{this.kind}}) control: {{this.control}}; capabilities: power{{#if this.capabilities.direction_modes}}, direction {{this.capabilities.direction_modes}}{{/if}}{{#if this.capabilities.speed_levels}}, speed {{this.capabilities.speed_levels}}{{/if}}{{#if this.capabilities.power_only}} (power-only via plug){{/if}}{{#if this.capabilities.constraints}}; constraints: {{#each this.capabilities.constraints}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}. Placement: {{this.placement_notes}}
+    {{/each}}
+  {{else}}  - (no devices defined)
+  {{/if}}
+{{/each}}
+
+---
+
+# CURRENT SNAPSHOT
+
+- Outdoor now: {{runtime.weatherLine}}
+- Sensor observation (UTC): {{runtime.sensorsObservedAt}}
+
+## Computed features
+{{#if features.length}}{{#each features}}- {{this.id}}: {{#if this.renderValue}}{{this.renderValue}}{{else}}(not available){{/if}}{{#if this.description}} — {{this.description}}{{/if}}
+{{/each}}{{else}}- (none){{/if}}
+
+## Rooms (mean/min/max across sensors)
+{{#each runtime.roomSummaries}}- {{this.roomId}}: temp °F (mean {{#if this.stats.temp_f.mean}}{{this.stats.temp_f.mean}}{{else}}?{{/if}}{{#if this.stats.temp_f.min}}, min {{this.stats.temp_f.min}}{{/if}}{{#if this.stats.temp_f.max}}, max {{this.stats.temp_f.max}}{{/if}}); RH% (mean {{#if this.stats.rh_pct.mean}}{{this.stats.rh_pct.mean}}{{else}}?{{/if}}{{#if this.stats.rh_pct.min}}, min {{this.stats.rh_pct.min}}{{/if}}{{#if this.stats.rh_pct.max}}, max {{this.stats.rh_pct.max}}{{/if}}){{#if this.representative}}; representative: {{this.representative.sensorId}} via {{this.representative.method}}{{/if}}
+{{/each}}
+
+## Per-sensor detail
+{{#each sensorsByRoom}}- {{this.room.id}}:
+  {{#if this.sensors.length}}
+    {{#each this.sensors}}  - {{this.sensor.id}}: {{#if this.reading}}{{this.reading.temp_f}}°F, {{this.reading.rh_pct}}% RH (dew point {{this.dewpoint_f}}°F; abs humidity {{this.absolute_humidity_gm3}} g/m³){{else}}(no reading){{/if}} — placement: {{this.sensor.placement_notes}}
+    {{/each}}
+  {{else}}  - (no sensors)
+  {{/if}}
+{{/each}}
+
+---
+
+# HISTORY WINDOW CSV (header + most recent rows)
+
+{{runtime.historyCsv}}
+
+---
+
+# OUTPUT INSTRUCTIONS (JSON only)
+
+Return ONLY JSON matching this schema (no commentary):
+{
+  "panel": [
+    { "speaker": "Gail S. Brager", "notes": "..." },
+    { "speaker": "Yehuda Katz", "notes": "..." },
+    { "speaker": "Paulus Schoutsen", "notes": "..." },
+    { "speaker": "Simon Willison", "notes": "..." },
+    { "speaker": "Stefano Schiavon", "notes": "..." },
+    { "speaker": "Deborah Treisman", "notes": "..." }
+  ],
+  "actions": {
+    "kitchen_transom": { "power": "ON|OFF", "direction": "EXHAUST|DIRECT", "speed": "LOW|MED|HIGH|TURBO", "auto": boolean, "set_temp_f": 60-90 },
+    "bathroom_transom": { "power": "ON|OFF", "direction": "EXHAUST|DIRECT", "speed": "LOW|MED|HIGH|TURBO", "auto": boolean, "set_temp_f": 60-90 },
+    "kitchen_vornado_630": { "power": "ON|OFF" },
+    "living_vornado_630": { "power": "ON|OFF" }
+  },
+  "hypothesis": "string",
+  "confidence_0_1": 0-1,
+  "predictions": { "<room_or_sensor_id>": { "temp_f_delta"?: number, "rh_pct_delta"?: number } }
+}
+
+- Devices are keyed by device ID (not room).
+- Transom fans: only on/off + direction + speed; auto/set_temp_f optional if useful.
+- Direction meanings: EXHAUST (pull out), DIRECT (intake).
+- Vornado 630 plugs are power-only (fan speed set manually on device).
+- Use available gradients (e.g., living_radiator_delta_f) and connectivity to reason about flow paths.
+- Maintain idempotency: avoid changing device states if already at requested values.

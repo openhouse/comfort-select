@@ -1,0 +1,231 @@
+{
+  "site": {
+    "id": "196-clinton-ave-apt-d43",
+    "label": "196 Clinton Ave, Apt D43, Brooklyn, NY",
+    "timezone": "America/New_York",
+    "address": "196 Clinton Ave, Apt D43, Brooklyn, NY 11205",
+    "location": {
+      "lat": 40.692,
+      "lon": -73.969306,
+      "elevation_ft": 164
+    },
+    "materials": ["lathe_plaster_walls", "brick_masonry_exterior", "wood_joists_floors", "tile_kitchen_bath"],
+    "notes": [
+      "Steam radiators exist and are NOT controllable.",
+      "Kitchen and bathroom have no other built-in exhaust besides their window transom fans.",
+      "Foyer/front hall connects directly to the stair landing; potential infiltration source."
+    ]
+  },
+  "curators": [
+    "Gail S. Brager",
+    "Yehuda Katz",
+    "Paulus Schoutsen",
+    "Simon Willison",
+    "Stefano Schiavon",
+    "Deborah Treisman"
+  ],
+  "rooms": [
+    {
+      "id": "kitchen",
+      "name": "Kitchen",
+      "kind": "kitchen",
+      "dimensions_ft": { "length_ft": 12, "width_ft": 8, "height_ft": 9.17 },
+      "irregularities": [
+        { "description": "front-left corner cutout", "size_ft": { "length_ft": 2.08, "width_ft": 2.17 } }
+      ],
+      "windows": { "count": 1, "notes": "exterior window with transom fan installed at top" },
+      "connected_room_ids": ["front_hall"],
+      "tags": ["tile_floor"]
+    },
+    {
+      "id": "front_hall",
+      "name": "Front hall / foyer",
+      "kind": "hall",
+      "dimensions_ft": { "length_ft": 8, "width_ft": 5, "height_ft": 9.25 },
+      "windows": { "count": 0 },
+      "connected_room_ids": ["kitchen", "living_room", "stair_landing"],
+      "notes": ["Connects to building stair landing; potential infiltration point."]
+    },
+    {
+      "id": "living_room",
+      "name": "Living room",
+      "kind": "living",
+      "dimensions_ft": { "length_ft": 14.42, "width_ft": 13.67, "height_ft": 9.25 },
+      "windows": { "count": 2, "notes": "steam radiator below one window" },
+      "connected_room_ids": ["front_hall", "back_hall"]
+    },
+    {
+      "id": "back_hall",
+      "name": "Back hall",
+      "kind": "hall",
+      "dimensions_ft": { "length_ft": 6.42, "width_ft": 3.08, "height_ft": 9.25 },
+      "windows": { "count": 0 },
+      "connected_room_ids": ["living_room", "bathroom", "bedroom", "back_hall_closet_1", "back_hall_closet_2"]
+    },
+    {
+      "id": "bathroom",
+      "name": "Bathroom",
+      "kind": "bathroom",
+      "dimensions_ft": { "length_ft": 8.08, "width_ft": 4.92, "height_ft": 9.17 },
+      "irregularities": [
+        { "description": "small bump-out", "size_ft": { "length_ft": 0.42, "width_ft": 1.5 } }
+      ],
+      "windows": { "count": 1, "notes": "exterior window with transom fan installed at top" },
+      "connected_room_ids": ["back_hall"]
+    },
+    {
+      "id": "bedroom",
+      "name": "Bedroom",
+      "kind": "bedroom",
+      "dimensions_ft": { "length_ft": 15.08, "width_ft": 10.58, "height_ft": 9.25 },
+      "windows": { "count": 2 },
+      "connected_room_ids": ["back_hall"],
+      "notes": ["Ceiling fan present but not yet integrated."]
+    },
+    {
+      "id": "back_hall_closet_1",
+      "name": "Back hall closet 1",
+      "kind": "closet",
+      "dimensions_ft": { "notes": "approx 5 ft² footprint; ~9.25 ft height" },
+      "connected_room_ids": ["back_hall"]
+    },
+    {
+      "id": "back_hall_closet_2",
+      "name": "Back hall closet 2",
+      "kind": "closet",
+      "dimensions_ft": { "notes": "approx 5.3 ft² footprint; ~9.25 ft height" },
+      "connected_room_ids": ["back_hall"]
+    },
+    {
+      "id": "stair_landing",
+      "name": "Building stair landing / hallway",
+      "kind": "external_hall",
+      "windows": { "count": 0 },
+      "connected_room_ids": ["front_hall"],
+      "exterior": true,
+      "notes": ["Represents outside-of-unit common hall."]
+    }
+  ],
+  "connections": [
+    { "from": "front_hall", "to": "kitchen", "kind": "doorway" },
+    { "from": "front_hall", "to": "living_room", "kind": "doorway" },
+    { "from": "front_hall", "to": "stair_landing", "kind": "entry_door" },
+    { "from": "living_room", "to": "back_hall", "kind": "open_passage" },
+    { "from": "back_hall", "to": "bathroom", "kind": "doorway" },
+    { "from": "back_hall", "to": "bedroom", "kind": "doorway" },
+    { "from": "back_hall", "to": "back_hall_closet_1", "kind": "closet_door" },
+    { "from": "back_hall", "to": "back_hall_closet_2", "kind": "closet_door" }
+  ],
+  "sensors": [
+    {
+      "id": "kitchen_main",
+      "name": "Kitchen main",
+      "room_id": "kitchen",
+      "role": "ambient",
+      "is_primary_for_room": true,
+      "manufacturer": "Ecowitt",
+      "placement_notes": "General kitchen placement"
+    },
+    {
+      "id": "bathroom_main",
+      "name": "Bathroom main",
+      "room_id": "bathroom",
+      "role": "ambient",
+      "is_primary_for_room": true,
+      "manufacturer": "Ecowitt",
+      "placement_notes": "Bathroom ambient"
+    },
+    {
+      "id": "bedroom_main",
+      "name": "Bedroom main",
+      "room_id": "bedroom",
+      "role": "ambient",
+      "is_primary_for_room": true,
+      "manufacturer": "Ecowitt",
+      "placement_notes": "Bedroom ambient"
+    },
+    {
+      "id": "front_hall_main",
+      "name": "Front hall main",
+      "room_id": "front_hall",
+      "role": "ambient",
+      "is_primary_for_room": true,
+      "manufacturer": "Ecowitt",
+      "placement_notes": "Foyer ambient"
+    },
+    {
+      "id": "back_hall_main",
+      "name": "Back hall main",
+      "room_id": "back_hall",
+      "role": "ambient",
+      "is_primary_for_room": true,
+      "manufacturer": "Ecowitt",
+      "placement_notes": "Back hall ambient"
+    },
+    {
+      "id": "living_center",
+      "name": "Living room center",
+      "room_id": "living_room",
+      "role": "ambient",
+      "is_primary_for_room": true,
+      "manufacturer": "Ecowitt",
+      "placement_notes": "Under dining table / desk near center (occupied zone proxy)"
+    },
+    {
+      "id": "living_radiator",
+      "name": "Living room radiator",
+      "room_id": "living_room",
+      "role": "radiator_proximity",
+      "is_primary_for_room": false,
+      "manufacturer": "Ecowitt",
+      "placement_notes": "Directly behind steam radiator under living room window"
+    }
+  ],
+  "devices": [
+    {
+      "id": "kitchen_transom",
+      "name": "Kitchen transom AE",
+      "room_id": "kitchen",
+      "kind": "transom_fan",
+      "control": "alexa",
+      "capabilities": { "power": true, "direction_modes": ["EXHAUST", "DIRECT"], "speed_levels": [1, 2, 3, 4] },
+      "placement_notes": "Mounted at top of kitchen window"
+    },
+    {
+      "id": "bathroom_transom",
+      "name": "Bathroom transom AE",
+      "room_id": "bathroom",
+      "kind": "transom_fan",
+      "control": "alexa",
+      "capabilities": { "power": true, "direction_modes": ["EXHAUST", "DIRECT"], "speed_levels": [1, 2, 3, 4] },
+      "placement_notes": "Mounted at top of bathroom window"
+    },
+    {
+      "id": "living_vornado_630",
+      "name": "Living room Vornado 630 (plug)",
+      "room_id": "living_room",
+      "kind": "room_fan_plug",
+      "control": "meross",
+      "capabilities": { "power": true, "power_only": true, "constraints": ["fan speed set manually on device"] },
+      "placement_notes": "On floor near living room radiator"
+    },
+    {
+      "id": "kitchen_vornado_630",
+      "name": "Kitchen Vornado 630 (plug)",
+      "room_id": "kitchen",
+      "kind": "room_fan_plug",
+      "control": "meross",
+      "capabilities": { "power": true, "power_only": true, "constraints": ["fan speed set manually on device"] },
+      "placement_notes": "Above refrigerator"
+    }
+  ],
+  "features": [
+    {
+      "id": "living_radiator_delta_f",
+      "description": "living_radiator temp_f minus living_center temp_f",
+      "sensors": ["living_radiator", "living_center"],
+      "rooms": ["living_room"],
+      "formula": "temp_f(living_radiator) - temp_f(living_center)"
+    }
+  ]
+}

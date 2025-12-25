@@ -11,7 +11,7 @@ export interface MerossWebhookConfig {
 
 export async function setPlugState(
   cfg: MerossWebhookConfig,
-  params: { plug: "kitchen_630_plug" | "living_room_630_plug"; state: PlugState; decisionId: string }
+  params: { plug: "kitchen_vornado_630" | "living_vornado_630"; state: PlugState; decisionId: string }
 ): Promise<void> {
   if (cfg.dryRun) return;
   if (!cfg.url) {
