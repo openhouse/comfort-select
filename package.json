@@ -1,5 +1,5 @@
 {
-  "name": "comfort-196",
+  "name": "comfort-select",
   "version": "0.1.0",
   "private": true,
   "description": "196 Clinton Ave Apt D43 comfort control loop (weather + sensors + LLM + Alexa/Meross + Google Sheets)",

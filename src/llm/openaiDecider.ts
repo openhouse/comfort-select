@@ -23,23 +23,29 @@ export async function decideWithOpenAI(
     input: [
       {
         role: "system",
-        content:
-          "Return ONLY JSON that matches the provided schema. Never claim to be real people; treat named experts as an imagined panel."
+        content: "Return ONLY JSON that matches the provided schema.",
       },
-      { role: "user", content: prompt }
+      { role: "user", content: prompt },
     ],
     text: {
-      format: zodTextFormat(schema, "comfort_decision")
+      format: zodTextFormat(schema, "comfort_decision"),
     },
-    store: false
+    store: false,
   });
 
   const parsed = (response as any).output_parsed as unknown;
   if (!parsed) {
     // When the model refuses, some SDKs surface a 'refusal' field.
     const refusal = (response as any).refusal ?? (response as any).output_text;
-    throw new Error(`OpenAI did not return a parsed decision. Refusal/output: ${String(refusal ?? "")}`);
+    throw new Error(
+      `OpenAI did not return a parsed decision. Refusal/output: ${String(
+        refusal ?? ""
+      )}`
+    );
   }
 
-  return { decision: parsed as Decision, responseId: (response as any).id as string | undefined };
+  return {
+    decision: parsed as Decision,
+    responseId: (response as any).id as string | undefined,
+  };
 }
