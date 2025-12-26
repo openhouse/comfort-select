@@ -2,8 +2,7 @@ export function nowUtcIso(): string {
   return new Date().toISOString();
 }
 
-export function nowLocalIso(timezone: string): string {
-  const date = new Date();
+export function nowLocalIso(timezone: string, date: Date = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
     year: "numeric",
@@ -12,30 +11,32 @@ export function nowLocalIso(timezone: string): string {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-    hour12: false
+    hour12: false,
+    hourCycle: "h23",
+    timeZoneName: "longOffset"
   }).formatToParts(date);
 
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
 
-  const yyyy = get("year");
-  const mm = get("month");
-  const dd = get("day");
-  const hh = get("hour");
-  const mi = get("minute");
-  const ss = get("second");
+  const yyyy = Number(get("year"));
+  const mm = Number(get("month"));
+  const dd = Number(get("day"));
+  const hh = Number(get("hour"));
+  const mi = Number(get("minute"));
+  const ss = Number(get("second"));
 
-  // Compute offset minutes between local timezone and UTC
-  const localDate = new Date(
-    date.toLocaleString("en-US", {
-      timeZone: timezone
-    })
-  );
-  const offsetMinutes = Math.round((localDate.getTime() - date.getTime()) / 60000);
+  const localAsUtc = Date.UTC(yyyy, mm - 1, dd, hh, mi, ss);
+  const offsetMinutes = Math.round((localAsUtc - date.getTime()) / 60000);
 
   const sign = offsetMinutes >= 0 ? "+" : "-";
   const absMinutes = Math.abs(offsetMinutes);
   const offsetHours = String(Math.floor(absMinutes / 60)).padStart(2, "0");
   const offsetMins = String(absMinutes % 60).padStart(2, "0");
 
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}${sign}${offsetHours}:${offsetMins}`;
+  const formattedDate = `${String(yyyy).padStart(4, "0")}-${String(mm).padStart(2, "0")}-${String(dd).padStart(
+    2,
+    "0"
+  )}T${String(hh).padStart(2, "0")}:${String(mi).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+
+  return `${formattedDate}${sign}${offsetHours}:${offsetMins}`;
 }

@@ -14,4 +14,7 @@ await overwriteSheet({
   serviceAccountJsonPath: cfg.GOOGLE_SERVICE_ACCOUNT_JSON
 }, [header]);
 
-logger.info("Sheet header initialized (Data tab overwritten)");
+logger.info(
+  { sheetName: cfg.GOOGLE_SHEETS_SHEET_NAME },
+  `Sheet header initialized (tab "${cfg.GOOGLE_SHEETS_SHEET_NAME}" overwritten)`
+);

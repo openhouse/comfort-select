@@ -23,6 +23,41 @@ async function getSheetsClient(serviceAccountJsonPath: string) {
   return sheets;
 }
 
+const ensuredSheets = new Set<string>();
+
+async function ensureSheetExists(
+  cfg: SheetsStoreConfig,
+  sheets?: Awaited<ReturnType<typeof getSheetsClient>>
+): Promise<void> {
+  const cacheKey = `${cfg.spreadsheetId}__${cfg.sheetName}`;
+  if (ensuredSheets.has(cacheKey)) return;
+
+  const client = sheets ?? (await getSheetsClient(cfg.serviceAccountJsonPath));
+  const spreadsheet = await client.spreadsheets.get({
+    spreadsheetId: cfg.spreadsheetId,
+    fields: "sheets.properties.title"
+  });
+  const hasSheet = (spreadsheet.data.sheets ?? []).some((s) => s.properties?.title === cfg.sheetName);
+  if (!hasSheet) {
+    await client.spreadsheets.batchUpdate({
+      spreadsheetId: cfg.spreadsheetId,
+      requestBody: {
+        requests: [
+          {
+            addSheet: {
+              properties: {
+                title: cfg.sheetName
+              }
+            }
+          }
+        ]
+      }
+    });
+  }
+
+  ensuredSheets.add(cacheKey);
+}
+
 const WEATHER_COLUMNS = [
   "weather__outside__temp_f",
   "weather__outside__rh_pct",
@@ -94,6 +129,7 @@ export function buildSheetHeader(siteConfig: SiteConfig): string[] {
 
 export async function readAllRows(cfg: SheetsStoreConfig): Promise<string[][]> {
   const sheets = await getSheetsClient(cfg.serviceAccountJsonPath);
+  await ensureSheetExists(cfg, sheets);
   const range = `${cfg.sheetName}!A:ZZ`;
 
   const res = await sheets.spreadsheets.values.get({
@@ -125,6 +161,7 @@ function normalizeRowValues(row: (string | number | boolean)[]): (string | numbe
 
 export async function appendRow(cfg: SheetsStoreConfig, row: (string | number | boolean)[]): Promise<void> {
   const sheets = await getSheetsClient(cfg.serviceAccountJsonPath);
+  await ensureSheetExists(cfg, sheets);
   await sheets.spreadsheets.values.append({
     spreadsheetId: cfg.spreadsheetId,
     range: `${cfg.sheetName}!A:ZZ`,
@@ -234,6 +271,7 @@ export async function overwriteSheet(
   rows: (string | number | boolean)[][]
 ): Promise<void> {
   const sheets = await getSheetsClient(cfg.serviceAccountJsonPath);
+  await ensureSheetExists(cfg, sheets);
   const range = `${cfg.sheetName}!A:ZZ`;
   await sheets.spreadsheets.values.clear({
     spreadsheetId: cfg.spreadsheetId,
