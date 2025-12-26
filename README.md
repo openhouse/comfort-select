@@ -94,6 +94,7 @@ The LLM prompt is rendered from a Handlebars template and a site JSON config:
 * Dev helper: `npm run print-prompt` renders the current prompt using mock sensors + live weather (falls back to a stub if unavailable)
 
 Edit these files to change curator names or site facts without touching TypeScript. The prompt is validated at load time via Zod; malformed JSON will fail fast.
+Structured Outputs note: the OpenAI schema must avoid dynamic-key objects (no `additionalProperties`). The `predictions` field is an array of `{ target_id, temp_f_delta, rh_pct_delta }` entries (use `[]` if none) to comply with the stricter schema.
 
 ## MongoDB as the primary history store
 

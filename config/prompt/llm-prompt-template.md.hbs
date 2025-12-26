@@ -96,7 +96,9 @@ Return ONLY JSON matching this schema (no commentary):
   },
   "hypothesis": "string",
   "confidence_0_1": 0-1,
-  "predictions": { "<room_or_sensor_id>": { "temp_f_delta": number | null, "rh_pct_delta": number | null } }
+  "predictions": [
+    { "target_id": "<room_or_sensor_id>", "temp_f_delta": number | null, "rh_pct_delta": number | null }
+  ]
 }
 
 - Devices are keyed by device ID (not room).
@@ -105,3 +107,4 @@ Return ONLY JSON matching this schema (no commentary):
 - Vornado 630 plugs are power-only (fan speed set manually on device).
 - Use available gradients (e.g., living_radiator_delta_f) and connectivity to reason about flow paths.
 - Maintain idempotency: avoid changing device states if already at requested values.
+- Always include `predictions` (use an empty array [] if no predictions or no change expected). Use `null` for unknown deltas.

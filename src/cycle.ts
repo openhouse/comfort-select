@@ -58,7 +58,8 @@ function noopDecision(reason: string, speakers: string[]): Decision {
       living_vornado_630: { power: "OFF" }
     },
     hypothesis: `Fallback no-op decision due to error: ${reason}`,
-    confidence_0_1: 0
+    confidence_0_1: 0,
+    predictions: []
   };
 }
 

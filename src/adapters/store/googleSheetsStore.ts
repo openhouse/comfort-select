@@ -251,7 +251,7 @@ export function cycleRecordToRow(rec: CycleRecord, siteConfig: SiteConfig, heade
   values.confidence_0_1 = rec.decision.confidence_0_1;
   values.panel_json = JSON.stringify(rec.decision.panel ?? []);
   values.panel_text = panelText;
-  values.predictions_json = JSON.stringify(rec.decision.predictions ?? {});
+  values.predictions_json = JSON.stringify(rec.decision.predictions ?? []);
   values.decision_json = JSON.stringify(rec.decision);
   values.actuation_errors_json = JSON.stringify(rec.actuation.errors);
   values.decision_id = rec.decision_id;

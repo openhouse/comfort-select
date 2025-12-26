@@ -159,6 +159,12 @@ export interface DecisionPanelNote {
   notes: string;
 }
 
+export interface PredictionEntry {
+  target_id: string;
+  temp_f_delta: number | null;
+  rh_pct_delta: number | null;
+}
+
 export interface Decision {
   panel: DecisionPanelNote[];
   actions: {
@@ -170,13 +176,7 @@ export interface Decision {
   hypothesis: string;
   confidence_0_1: number;
   openai_response_id?: string;
-  predictions?: Record<
-    string,
-    {
-      temp_f_delta?: number;
-      rh_pct_delta?: number;
-    }
-  >;
+  predictions: PredictionEntry[];
 }
 
 export interface ActuationResult {
