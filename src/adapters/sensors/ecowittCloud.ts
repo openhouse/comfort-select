@@ -45,6 +45,30 @@ function findValue(payload: any, key: string): unknown {
   return undefined;
 }
 
+function normalizeMac(mac: string): string {
+  return mac.replace(/[^a-fA-F0-9]/g, "").toLowerCase();
+}
+
+function extractMacFromDevice(device: any): { raw: string; normalized: string } | null {
+  const candidates = [
+    device?.mac,
+    device?.device_mac,
+    device?.macAddress,
+    device?.device_mac_address,
+    device?.deviceMac
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const raw = candidate.trim();
+    if (!raw) continue;
+    const normalized = normalizeMac(raw);
+    if (normalized.length === 12) return { raw, normalized };
+  }
+
+  return null;
+}
+
 async function getDeviceMac(params: {
   baseUrl: string;
   applicationKey: string;
@@ -52,7 +76,8 @@ async function getDeviceMac(params: {
   preferredMac?: string;
   timeoutMs: number;
 }): Promise<string> {
-  if (params.preferredMac) return params.preferredMac;
+  const preferred = params.preferredMac?.trim();
+  const preferredNormalized = preferred ? normalizeMac(preferred) : null;
 
   const url = new URL("/api/v3/device/list", params.baseUrl);
   url.searchParams.set("application_key", params.applicationKey);
@@ -64,26 +89,60 @@ async function getDeviceMac(params: {
   if (!resp.ok) throw new Error(`Ecowitt Cloud device/list error: ${resp.status} ${resp.statusText}`);
   const json = (await resp.json()) as any;
 
-  const items = Array.isArray(json?.data?.items)
-    ? json.data.items
-    : Array.isArray(json?.data)
-      ? json.data
-      : [];
+  const arraysToCheck = [
+    json?.data?.items,
+    json?.data?.list,
+    json?.data?.devices,
+    Array.isArray(json?.data) ? json.data : null
+  ];
 
-  const first = items[0];
-  const mac =
-    first?.mac ??
-    first?.device_mac ??
-    first?.macAddress ??
-    first?.device_id ??
-    first?.id;
+  const items = arraysToCheck.flatMap((arr) => (Array.isArray(arr) ? arr : []));
 
-  if (!mac) {
-    logger.error({ payload: json }, "Unable to determine device MAC from Ecowitt Cloud device/list");
-    throw new Error("Ecowitt Cloud device/list did not return any devices");
+  if (!items.length) {
+    const dataKeys = json?.data ? Object.keys(json.data) : [];
+    logger.error({ payload: json, dataKeys }, "Ecowitt Cloud device/list returned no array items");
+    throw new Error(
+      `Ecowitt Cloud device/list did not return any devices (checked keys: items, list, devices; data keys: ${dataKeys.join(",")})`
+    );
   }
 
-  return mac;
+  const devicesWithMac = items
+    .map((item) => ({ item, mac: extractMacFromDevice(item) }))
+    .filter((d): d is { item: any; mac: { raw: string; normalized: string } } => Boolean(d.mac));
+
+  if (!devicesWithMac.length) {
+    const availableKeys = items[0] ? Object.keys(items[0]) : [];
+    logger.error({ payload: json, availableKeys }, "Unable to determine device MAC from Ecowitt Cloud device/list");
+    throw new Error(
+      `Ecowitt Cloud device/list returned devices but no MACs (available keys on first item: ${availableKeys.join(",")}). Set ECOWITT_CLOUD_DEVICE_MAC to override.`
+    );
+  }
+
+  if (preferred) {
+    if (preferredNormalized?.length !== 12) {
+      throw new Error(
+        `ECOWITT_CLOUD_DEVICE_MAC should be a MAC address (e.g. 34:CD:B0:8D:B0:64); received "${preferred}".`
+      );
+    }
+    const matched = devicesWithMac.find((d) => d.mac.normalized === preferredNormalized);
+    if (!matched) {
+      logger.warn(
+        { preferred, devices: devicesWithMac.map((d) => ({ name: d.item?.name, mac: d.mac.raw })) },
+        "Preferred Ecowitt device MAC not found in device/list; using provided value"
+      );
+      return preferred;
+    }
+    return matched.mac.raw;
+  }
+
+  if (devicesWithMac.length > 1) {
+    logger.info(
+      { devices: devicesWithMac.map((d) => ({ name: d.item?.name ?? d.item?.id, mac: d.mac.raw })) },
+      "Ecowitt Cloud devices discovered; selecting first device"
+    );
+  }
+
+  return devicesWithMac[0]!.mac.raw;
 }
 
 async function fetchRealTime(params: {

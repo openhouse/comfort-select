@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { MongoClient, Db, Collection } from "mongodb";
 import { CycleRecord } from "../../types.js";
 import { SiteConfig } from "../../siteConfig.js";
+import { logger } from "../../utils/logger.js";
 
 export interface MongoStoreConfig {
   uri: string;
@@ -39,10 +40,19 @@ export function hashSiteConfig(siteConfig: SiteConfig): string {
 }
 
 async function ensureIndexes(cyclesCollection: Collection<CycleRecordDocument>) {
-  await cyclesCollection.createIndex({ _id: 1 }, { unique: true });
-  await cyclesCollection.createIndex({ timestamp_utc: -1 });
-  await cyclesCollection.createIndex({ timestamp_utc_iso: -1 });
-  await cyclesCollection.createIndex({ site_config_hash: 1 });
+  const indexSpecs: { keys: Record<string, 1 | -1>; options?: Parameters<Collection["createIndex"]>[1] }[] = [
+    { keys: { timestamp_utc: -1 } },
+    { keys: { timestamp_utc_iso: -1 } },
+    { keys: { site_config_hash: 1 } }
+  ];
+
+  for (const { keys, options } of indexSpecs) {
+    try {
+      await cyclesCollection.createIndex(keys, options);
+    } catch (err) {
+      logger.warn({ err, keys }, "Unable to create MongoDB index; continuing");
+    }
+  }
 }
 
 export async function initMongo(cfg: MongoStoreConfig): Promise<MongoStore> {
