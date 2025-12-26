@@ -15,6 +15,14 @@ export const PlugStateSchema = z.object({
   power: z.enum(["ON", "OFF"])
 });
 
+const PredictionEntrySchema = z
+  .object({
+    target_id: z.string().min(1),
+    temp_f_delta: z.number().nullable(),
+    rh_pct_delta: z.number().nullable()
+  })
+  .strict();
+
 const PanelNoteSchemaFactory = (speakers: string[]) => {
   const speakerSchema = speakers.length > 0 ? z.enum(speakers as [string, ...string[]]) : z.string().min(1);
 
@@ -40,13 +48,7 @@ export const buildDecisionSchema = (curatorLabels: string[]) => {
     }),
     hypothesis: z.string().min(1),
     confidence_0_1: z.number().min(0).max(1),
-    predictions: z.record(
-      z.string(),
-      z.object({
-        temp_f_delta: z.number().nullable(),
-        rh_pct_delta: z.number().nullable()
-      })
-    )
+    predictions: z.array(PredictionEntrySchema)
   });
 };
 
