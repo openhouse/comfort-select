@@ -96,7 +96,7 @@ Return ONLY JSON matching this schema (no commentary):
   },
   "hypothesis": "string",
   "confidence_0_1": 0-1,
-  "predictions": { "<room_or_sensor_id>": { "temp_f_delta"?: number, "rh_pct_delta"?: number } }
+  "predictions": { "<room_or_sensor_id>": { "temp_f_delta": number | null, "rh_pct_delta": number | null } }
 }
 
 - Devices are keyed by device ID (not room).

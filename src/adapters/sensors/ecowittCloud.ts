@@ -3,13 +3,13 @@ import { SensorReading, SensorsNow } from "../../types.js";
 import { logger } from "../../utils/logger.js";
 import { fetchWithTimeout } from "../../utils/fetchWithTimeout.js";
 
-type MappingEntry = {
+export type MappingEntry = {
   id: string;
   tempKey: string;
   humidityKey: string;
 };
 
-type MappingFile = { sensors: MappingEntry[] };
+export type MappingFile = { sensors: MappingEntry[] };
 
 function coerceNumber(v: unknown): number {
   if (typeof v === "number") return v;
@@ -145,6 +145,67 @@ async function getDeviceMac(params: {
   return devicesWithMac[0]!.mac.raw;
 }
 
+export function normalizeRealTimePayload(dataRoot: any): {
+  normalizedData: Record<string, unknown>;
+  channelsDiscovered: number[];
+} {
+  const normalizedData: Record<string, unknown> =
+    dataRoot && typeof dataRoot === "object" && !Array.isArray(dataRoot) ? { ...dataRoot } : {};
+
+  const channelsDiscovered: number[] = [];
+
+  for (const [key, value] of Object.entries(dataRoot ?? {})) {
+    const match = key.match(/^temp_and_humidity_ch(\d+)$/i);
+    if (!match || typeof value !== "object" || value === null) continue;
+
+    const channel = Number.parseInt(match[1]!, 10);
+    const temperature = (value as any)?.temperature?.value ?? (value as any)?.temperature;
+    const humidity = (value as any)?.humidity?.value ?? (value as any)?.humidity;
+
+    if (temperature !== undefined) normalizedData[`temp${channel}f`] = temperature;
+    if (humidity !== undefined) normalizedData[`humidity${channel}`] = humidity;
+    channelsDiscovered.push(channel);
+  }
+
+  const indoor = (dataRoot as any)?.indoor;
+  if (indoor && typeof indoor === "object") {
+    const indoorTemp = indoor.temperature?.value ?? indoor.temperature;
+    const indoorHumidity = indoor.humidity?.value ?? indoor.humidity;
+    if (indoorTemp !== undefined) normalizedData.tempinf = indoorTemp;
+    if (indoorHumidity !== undefined) normalizedData.humidityin = indoorHumidity;
+  }
+
+  return { normalizedData, channelsDiscovered: Array.from(new Set(channelsDiscovered)).sort((a, b) => a - b) };
+}
+
+export function mapReadingsFromPayload(mapping: MappingFile, payloadRoot: any): SensorReading[] {
+  const readings: SensorReading[] = [];
+
+  for (const entry of mapping.sensors) {
+    const tempVal = findValue(payloadRoot, entry.tempKey);
+    const rhVal = findValue(payloadRoot, entry.humidityKey);
+
+    if (tempVal === undefined || rhVal === undefined) {
+      logger.warn(
+        { sensorId: entry.id, tempKey: entry.tempKey, humidityKey: entry.humidityKey },
+        "Ecowitt Cloud payload missing mapped keys; skipping sensor"
+      );
+      continue;
+    }
+
+    try {
+      readings.push({ sensorId: entry.id, temp_f: coerceNumber(tempVal), rh_pct: coerceNumber(rhVal) });
+    } catch (err) {
+      logger.warn(
+        { sensorId: entry.id, tempValue: tempVal, humidityValue: rhVal, err },
+        "Ecowitt Cloud payload contained non-numeric values; skipping sensor"
+      );
+    }
+  }
+
+  return readings;
+}
+
 async function fetchRealTime(params: {
   baseUrl: string;
   applicationKey: string;
@@ -195,21 +256,19 @@ export async function getSensorsNowFromCloud(params: {
   }
 
   const dataRoot = payload?.data ?? payload;
+  const { normalizedData, channelsDiscovered } = normalizeRealTimePayload(dataRoot);
 
-  const readings: SensorReading[] = mapping.sensors.map((r) => {
-    const tempVal = findValue(dataRoot, r.tempKey);
-    const rhVal = findValue(dataRoot, r.humidityKey);
-    if (tempVal === undefined || rhVal === undefined) {
-      throw new Error(
-        `Ecowitt Cloud payload missing keys for ${r.id}: tempKey=${r.tempKey}, humidityKey=${r.humidityKey}`
-      );
-    }
-    return { sensorId: r.id, temp_f: coerceNumber(tempVal), rh_pct: coerceNumber(rhVal) };
-  });
+  logger.debug({ channelsDiscovered, normalizedKeys: Object.keys(normalizedData) }, "Ecowitt Cloud normalized payload");
+
+  const readings = mapReadingsFromPayload(mapping, normalizedData);
+
+  if (readings.length === 0) {
+    throw new Error("Ecowitt Cloud payload did not include any mapped sensor readings");
+  }
 
   return {
     observation_time_utc: new Date().toISOString(),
     readings,
-    raw: payload
+    raw: { ...payload, data: normalizedData }
   };
 }
