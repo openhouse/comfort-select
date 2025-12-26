@@ -1,8 +1,10 @@
-## Role-play as a panel of building science + control experts
+Please role-play as {{#each curators}}{{#if @last}}and {{/if}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}:
+- indicate who is speaking
+- say what you think (field: `panel[]` -> `{ speaker, notes }`)
 
-{{#each curators}}- {{this}}{{/each}}
-
-Provide short, high-signal notes for each speaker (field: `panel[]` -> `{ speaker, notes }`), then decide device states.
+Maximize comfort throughout this dwelling, now and over time.
+Observe, study, discern, discuss and learn together.
+Then decide on optimal device states.
 
 ---
 
@@ -15,11 +17,9 @@ Provide short, high-signal notes for each speaker (field: `panel[]` -> `{ speake
 - Windows by room:
   {{#each rooms}}- {{this.id}}: {{#if this.windows}}{{this.windows.count}} exterior{{#if this.windows.notes}} ({{this.windows.notes}}){{/if}}{{else}}0{{/if}}
   {{/each}}
-- Kitchen + bathroom have **no other built-in exhaust** besides their window transom fans.
-- Front hall/foyer connects to the stair landing (potential infiltration/make-up air path).
 
 ### Rooms & dimensions
-{{#each rooms}}- {{this.id}} ({{this.kind}}): {{this.name}}; dims ~{{#if this.dimensions_ft.length_ft}}{{this.dimensions_ft.length_ft}}'{{else}}?{{/if}} x {{#if this.dimensions_ft.width_ft}}{{this.dimensions_ft.width_ft}}'{{else}}?{{/if}} x {{#if this.dimensions_ft.height_ft}}{{this.dimensions_ft.height_ft}}'{{else}}?{{/if}}{{#if this.irregularities}}; irregularities: {{#each this.irregularities}}{{this.description}}{{#unless @last}}; {{/unless}}{{/each}}{{/if}}{{#if this.notes}}; notes: {{#each this.notes}}{{this}}{{#unless @last}}; {{/unless}}{{/each}}{{/if}}
+{{#each rooms}}- {{this.id}} ({{this.kind}}): "{{this.name}}"; dims ~{{#if this.dimensions_ft.length_ft}}{{this.dimensions_ft.length_ft}}'{{else}}?{{/if}} x {{#if this.dimensions_ft.width_ft}}{{this.dimensions_ft.width_ft}}'{{else}}?{{/if}} x {{#if this.dimensions_ft.height_ft}}{{this.dimensions_ft.height_ft}}'{{else}}?{{/if}}{{#if this.irregularities}}; irregularities: {{#each this.irregularities}}{{this.description}}{{#unless @last}}; {{/unless}}{{/each}}{{/if}}{{#if this.notes}}; notes: {{#each this.notes}}{{this}}{{#unless @last}}; {{/unless}}{{/each}}{{/if}}
 {{/each}}
 
 ### Connectivity graph (adjacency list)
@@ -27,22 +27,14 @@ Provide short, high-signal notes for each speaker (field: `panel[]` -> `{ speake
 {{/each}}
 
 ### Sensors by room
-{{#each sensorsByRoom}}- {{this.room.id}}:
-  {{#if this.sensors.length}}
-    {{#each this.sensors}}  - {{this.sensor.id}} ({{this.sensor.role}}) in {{../room.name}} — placement: {{this.sensor.placement_notes}}{{#if this.sensor.is_primary_for_room}} (primary for room){{/if}}
-    {{/each}}
-  {{else}}  - (no sensors defined)
-  {{/if}}
+{{#each sensorsByRoom}}
+- {{this.room.id}}:{{#if this.sensors.length}}{{#each this.sensors}}
+  - {{this.sensor.id}}: {{this.sensor.placement_notes}} in {{../room.name}}{{/each}}{{else}} (no sensors defined){{/if}}
 {{/each}}
 
-### Devices by room
-{{#each devicesByRoom}}- {{this.room.id}}:
-  {{#if this.devices.length}}
-    {{#each this.devices}}  - {{this.id}} ({{this.kind}}) control: {{this.control}}; capabilities: power{{#if this.capabilities.direction_modes}}, direction {{this.capabilities.direction_modes}}{{/if}}{{#if this.capabilities.speed_levels}}, speed {{this.capabilities.speed_levels}}{{/if}}{{#if this.capabilities.power_only}} (power-only via plug){{/if}}{{#if this.capabilities.constraints}}; constraints: {{#each this.capabilities.constraints}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}. Placement: {{this.placement_notes}}
-    {{/each}}
-  {{else}}  - (no devices defined)
-  {{/if}}
-{{/each}}
+### Devices by room {{#each devicesByRoom}}
+- {{this.room.id}}: {{#if this.devices.length}}{{#each this.devices}}
+  - {{this.id}} ({{this.kind}}): "{{this.name}}";  control: {{this.control}}; capabilities: power{{#if this.capabilities.direction_modes}}, direction {{this.capabilities.direction_modes}}{{/if}}{{#if this.capabilities.speed_levels}}, speed {{this.capabilities.speed_levels}}{{/if}}{{#if this.capabilities.power_only}} (power-only via plug){{/if}}{{#if this.capabilities.constraints}}; constraints: {{#each this.capabilities.constraints}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{/if}}. Placement: {{this.placement_notes}}{{/each}}{{else}}(no devices defined){{/if}}{{/each}}
 
 ---
 
@@ -51,21 +43,10 @@ Provide short, high-signal notes for each speaker (field: `panel[]` -> `{ speake
 - Outdoor now: {{runtime.weatherLine}}
 - Sensor observation (UTC): {{runtime.sensorsObservedAt}}
 
-## Computed features
-{{#if features.length}}{{#each features}}- {{this.id}}: {{#if this.renderValue}}{{this.renderValue}}{{else}}(not available){{/if}}{{#if this.description}} — {{this.description}}{{/if}}
-{{/each}}{{else}}- (none){{/if}}
-
-## Rooms (mean/min/max across sensors)
-{{#each runtime.roomSummaries}}- {{this.roomId}}: temp °F (mean {{#if this.stats.temp_f.mean}}{{this.stats.temp_f.mean}}{{else}}?{{/if}}{{#if this.stats.temp_f.min}}, min {{this.stats.temp_f.min}}{{/if}}{{#if this.stats.temp_f.max}}, max {{this.stats.temp_f.max}}{{/if}}); RH% (mean {{#if this.stats.rh_pct.mean}}{{this.stats.rh_pct.mean}}{{else}}?{{/if}}{{#if this.stats.rh_pct.min}}, min {{this.stats.rh_pct.min}}{{/if}}{{#if this.stats.rh_pct.max}}, max {{this.stats.rh_pct.max}}{{/if}}){{#if this.representative}}; representative: {{this.representative.sensorId}} via {{this.representative.method}}{{/if}}
-{{/each}}
-
 ## Per-sensor detail
-{{#each sensorsByRoom}}- {{this.room.id}}:
-  {{#if this.sensors.length}}
-    {{#each this.sensors}}  - {{this.sensor.id}}: {{#if this.reading}}{{this.reading.temp_f}}°F, {{this.reading.rh_pct}}% RH (dew point {{this.dewpoint_f}}°F; abs humidity {{this.absolute_humidity_gm3}} g/m³){{else}}(no reading){{/if}} — placement: {{this.sensor.placement_notes}}
-    {{/each}}
-  {{else}}  - (no sensors)
-  {{/if}}
+{{#each sensorsByRoom}}
+- {{this.room.id}}: {{#if this.sensors.length}}{{#each this.sensors}}
+  - {{this.sensor.id}}: {{#if this.reading}}{{this.reading.temp_f}}°F, {{this.reading.rh_pct}}% RH (dew point {{this.dewpoint_f}}°F; abs humidity {{this.absolute_humidity_gm3}} g/m³){{else}}(no reading){{/if}}; placement: {{this.sensor.placement_notes}}{{/each}}{{else}}(no sensors){{/if}}
 {{/each}}
 
 ---
@@ -82,9 +63,6 @@ Return ONLY JSON matching this schema (no commentary):
 {
   "panel": [
     { "speaker": "Gail S. Brager", "notes": "..." },
-    { "speaker": "Yehuda Katz", "notes": "..." },
-    { "speaker": "Paulus Schoutsen", "notes": "..." },
-    { "speaker": "Simon Willison", "notes": "..." },
     { "speaker": "Stefano Schiavon", "notes": "..." },
     { "speaker": "Deborah Treisman", "notes": "..." }
   ],
@@ -101,10 +79,10 @@ Return ONLY JSON matching this schema (no commentary):
   ]
 }
 
-- Devices are keyed by device ID (not room).
-- Transom fans: only on/off + direction + speed; auto/set_temp_f optional if useful.
-- Direction meanings: EXHAUST (pull out), DIRECT (intake).
+{{! - Devices are keyed by device ID (not room). }}
 - Vornado 630 plugs are power-only (fan speed set manually on device).
-- Use available gradients (e.g., living_radiator_delta_f) and connectivity to reason about flow paths.
-- Maintain idempotency: avoid changing device states if already at requested values.
+- Vornado Transom AE fans: only on/off + direction + speed; auto/set_temp_f optional if useful.
+- Direction meanings: EXHAUST (pull out), DIRECT (intake).
+{{! - Use available gradients (e.g., living_radiator_delta_f) and connectivity to reason about flow paths. /}}
+{{! - Maintain idempotency: avoid changing device states if already at requested values. /}}
 - Always include `predictions` (use an empty array [] if no predictions or no change expected). Use `null` for unknown deltas.

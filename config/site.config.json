@@ -9,21 +9,19 @@
       "lon": -73.969306,
       "elevation_ft": 164
     },
-    "materials": ["lathe_plaster_walls", "brick_masonry_exterior", "wood_joists_floors", "tile_kitchen_bath"],
+    "materials": [
+      "lathe_plaster_walls",
+      "brick_masonry_exterior",
+      "wood_joists_floors",
+      "tile_kitchen_bath"
+    ],
     "notes": [
-      "Steam radiators exist and are NOT controllable.",
-      "Kitchen and bathroom have no other built-in exhaust besides their window transom fans.",
-      "Foyer/front hall connects directly to the stair landing; potential infiltration source."
+      "196 Clinton Avenue was built in 1903 and has 5 stories and 98 units",
+      "Steam radiators exist builing-wide and are NOT controllable per unit.",
+      "Kitchen and bathroom have no other built-in exhaust besides their window transom fans."
     ]
   },
-  "curators": [
-    "Gail S. Brager",
-    "Yehuda Katz",
-    "Paulus Schoutsen",
-    "Simon Willison",
-    "Stefano Schiavon",
-    "Deborah Treisman"
-  ],
+  "curators": ["Gail S. Brager", "Stefano Schiavon", "Deborah Treisman"],
   "rooms": [
     {
       "id": "kitchen",
@@ -31,7 +29,10 @@
       "kind": "kitchen",
       "dimensions_ft": { "length_ft": 12, "width_ft": 8, "height_ft": 9.17 },
       "irregularities": [
-        { "description": "front-left corner cutout", "size_ft": { "length_ft": 2.08, "width_ft": 2.17 } }
+        {
+          "description": "front-left corner cutout",
+          "size_ft": { "length_ft": 2.08, "width_ft": 2.17 }
+        }
       ],
       "windows": { "count": 1, "notes": "exterior window with transom fan installed at top" },
       "connected_room_ids": ["front_hall"],
@@ -44,14 +45,14 @@
       "dimensions_ft": { "length_ft": 8, "width_ft": 5, "height_ft": 9.25 },
       "windows": { "count": 0 },
       "connected_room_ids": ["kitchen", "living_room", "stair_landing"],
-      "notes": ["Connects to building stair landing; potential infiltration point."]
+      "notes": ["Connects to shared building indoor 4th-floor stair landing; potential air path."]
     },
     {
       "id": "living_room",
       "name": "Living room",
       "kind": "living",
       "dimensions_ft": { "length_ft": 14.42, "width_ft": 13.67, "height_ft": 9.25 },
-      "windows": { "count": 2, "notes": "steam radiator below one window" },
+      "windows": { "count": 2, "notes": "steam radiator below two-window bay" },
       "connected_room_ids": ["front_hall", "back_hall"]
     },
     {
@@ -60,7 +61,13 @@
       "kind": "hall",
       "dimensions_ft": { "length_ft": 6.42, "width_ft": 3.08, "height_ft": 9.25 },
       "windows": { "count": 0 },
-      "connected_room_ids": ["living_room", "bathroom", "bedroom", "back_hall_closet_1", "back_hall_closet_2"]
+      "connected_room_ids": [
+        "living_room",
+        "bathroom",
+        "bedroom",
+        "back_hall_closet_1",
+        "back_hall_closet_2"
+      ]
     },
     {
       "id": "bathroom",
@@ -103,7 +110,7 @@
       "windows": { "count": 0 },
       "connected_room_ids": ["front_hall"],
       "exterior": true,
-      "notes": ["Represents outside-of-unit common hall."]
+      "notes": ["Represents outside-of-unit fourth-floor indoor common hall."]
     }
   ],
   "connections": [
@@ -124,7 +131,7 @@
       "role": "ambient",
       "is_primary_for_room": true,
       "manufacturer": "Ecowitt",
-      "placement_notes": "General kitchen placement"
+      "placement_notes": "Underside of kitchen table"
     },
     {
       "id": "bathroom_main",
@@ -133,7 +140,7 @@
       "role": "ambient",
       "is_primary_for_room": true,
       "manufacturer": "Ecowitt",
-      "placement_notes": "Bathroom ambient"
+      "placement_notes": "above bathroom sink"
     },
     {
       "id": "bedroom_main",
@@ -142,7 +149,7 @@
       "role": "ambient",
       "is_primary_for_room": true,
       "manufacturer": "Ecowitt",
-      "placement_notes": "Bedroom ambient"
+      "placement_notes": "on table near bed"
     },
     {
       "id": "front_hall_main",
@@ -169,7 +176,7 @@
       "role": "ambient",
       "is_primary_for_room": true,
       "manufacturer": "Ecowitt",
-      "placement_notes": "Under dining table / desk near center (occupied zone proxy)"
+      "placement_notes": "Underside of dining table / desk near center"
     },
     {
       "id": "living_radiator",
@@ -184,38 +191,54 @@
   "devices": [
     {
       "id": "kitchen_transom",
-      "name": "Kitchen transom AE",
+      "name": "Kitchen Window Vornado Transom AE",
       "room_id": "kitchen",
-      "kind": "transom_fan",
+      "kind": "vornado_transom_ae_fan",
       "control": "alexa",
-      "capabilities": { "power": true, "direction_modes": ["EXHAUST", "DIRECT"], "speed_levels": [1, 2, 3, 4] },
+      "capabilities": {
+        "power": true,
+        "direction_modes": ["EXHAUST", "DIRECT"],
+        "speed_levels": [1, 2, 3, 4]
+      },
       "placement_notes": "Mounted at top of kitchen window"
     },
     {
       "id": "bathroom_transom",
-      "name": "Bathroom transom AE",
+      "name": "Bathroom Window Vornado Transom AE",
       "room_id": "bathroom",
-      "kind": "transom_fan",
+      "kind": "vornado_transom_ae_fan",
       "control": "alexa",
-      "capabilities": { "power": true, "direction_modes": ["EXHAUST", "DIRECT"], "speed_levels": [1, 2, 3, 4] },
+      "capabilities": {
+        "power": true,
+        "direction_modes": ["EXHAUST", "DIRECT"],
+        "speed_levels": [1, 2, 3, 4]
+      },
       "placement_notes": "Mounted at top of bathroom window"
     },
     {
       "id": "living_vornado_630",
-      "name": "Living room Vornado 630 (plug)",
+      "name": "Living Room Vornado 630 (smart plug)",
       "room_id": "living_room",
-      "kind": "room_fan_plug",
+      "kind": "vornado_630_air_circulator_fan",
       "control": "meross",
-      "capabilities": { "power": true, "power_only": true, "constraints": ["fan speed set manually on device"] },
+      "capabilities": {
+        "power": true,
+        "power_only": true,
+        "constraints": ["fan speed set manually on device"]
+      },
       "placement_notes": "On floor near living room radiator"
     },
     {
       "id": "kitchen_vornado_630",
-      "name": "Kitchen Vornado 630 (plug)",
+      "name": "Kitchen Vornado 630 (smart plug)",
       "room_id": "kitchen",
-      "kind": "room_fan_plug",
+      "kind": "vornado_630_air_circulator_fan",
       "control": "meross",
-      "capabilities": { "power": true, "power_only": true, "constraints": ["fan speed set manually on device"] },
+      "capabilities": {
+        "power": true,
+        "power_only": true,
+        "constraints": ["fan speed set manually on device"]
+      },
       "placement_notes": "Above refrigerator"
     }
   ],
