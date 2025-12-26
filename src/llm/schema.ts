@@ -40,15 +40,13 @@ export const buildDecisionSchema = (curatorLabels: string[]) => {
     }),
     hypothesis: z.string().min(1),
     confidence_0_1: z.number().min(0).max(1),
-    predictions: z
-      .record(
-        z.string(),
-        z.object({
-          temp_f_delta: z.number().optional(),
-          rh_pct_delta: z.number().optional()
-        })
-      )
-      .optional()
+    predictions: z.record(
+      z.string(),
+      z.object({
+        temp_f_delta: z.number().nullable(),
+        rh_pct_delta: z.number().nullable()
+      })
+    )
   });
 };
 

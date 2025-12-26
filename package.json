@@ -12,7 +12,8 @@
     "run-once": "tsx scripts/run-once.ts",
     "init-sheet": "tsx scripts/init-sheet.ts",
     "rebuild-sheet": "tsx scripts/rebuild-sheet.ts",
-    "print-prompt": "tsx scripts/print-prompt.ts"
+    "print-prompt": "tsx scripts/print-prompt.ts",
+    "test": "tsx --test src/llm/schema.test.ts src/adapters/sensors/ecowittCloud.test.ts"
   },
   "engines": {
     "node": ">=20.0.0"
