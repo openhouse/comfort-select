@@ -57,10 +57,13 @@ Edit `.env`:
 * Actuation:
 
   * set `DRY_RUN=true` initially
-  * optionally point `ALEXA_WEBHOOK_URL` + `MEROSS_WEBHOOK_URL` to your own endpoints
+  * optionally point `ALEXA_WEBHOOK_URL` + `MEROSS_WEBHOOK_URL` to your own endpoints (see Alexa routine bridge below)
 * History + prompt controls:
   * `HISTORY_MODE=window|full` (default `window`)
   * `HISTORY_ROWS=200` (rows of history, excluding header, when `window`)
+  * `PROMPT_HISTORY_MAX_ROWS=120` (prompt-only compact window)
+  * `PROMPT_HISTORY_MAX_MINUTES=180` (wall-clock cap for prompt history)
+  * `PROMPT_HISTORY_SUMMARY_MAX_CHARS=1200` (auto-generated summary block trim)
 * `PROMPT_MAX_CHARS=120000` (safety cap on history CSV length)
 * `HTTP_TIMEOUT_MS=10000` (network timeout for sensors/weather/webhooks/OpenAI)
 
@@ -91,7 +94,7 @@ The LLM prompt is rendered from a Handlebars template and a site JSON config:
 * Template: `config/prompt/llm-prompt-template.md.hbs` (override with `PROMPT_TEMPLATE_PATH`)
 * Site config: `config/site.config.json` (override with `SITE_CONFIG_PATH`)
 * Curators: defaults come from the site config, but you can override via `CURATORS_JSON` env
-* Dev helper: `npm run print-prompt` renders the current prompt using mock sensors + live weather (falls back to a stub if unavailable)
+* Dev helper: `npm run print-prompt` renders the current prompt using mock sensors + live weather and **real Mongo history rows** (falls back to header-only if Mongo is unreachable)
 
 Edit these files to change curator names or site facts without touching TypeScript. The prompt is validated at load time via Zod; malformed JSON will fail fast.
 Structured Outputs note: the OpenAI schema must avoid dynamic-key objects (no `additionalProperties`). The `predictions` field is an array of `{ target_id, temp_f_delta, rh_pct_delta }` entries (use `[]` if none) to comply with the stricter schema.
@@ -99,7 +102,7 @@ Structured Outputs note: the OpenAI schema must avoid dynamic-key objects (no `a
 ## MongoDB as the primary history store
 
 * MongoDB stores the full `CycleRecord` (weather, sensors, telemetry, features, decision, actuation) in an append-only collection (default `cycle_records`).
-* Prompt history is pulled from MongoDB (not Sheets). `HISTORY_MODE` + `HISTORY_ROWS` control the query window, and the prompt renderer further trims if `PROMPT_MAX_CHARS` is exceeded.
+* Prompt history is pulled from MongoDB (not Sheets). `HISTORY_MODE` + `HISTORY_ROWS` control the query window, and the prompt renderer trims using a **compact projection + summary** obeying `PROMPT_HISTORY_MAX_ROWS` and `PROMPT_HISTORY_MAX_MINUTES`.
 * Each cycle inserts with a unique `decision_id`, indexed timestamps, and a deterministic hash of the current site config for observability.
 * MongoDB errors are treated as blocking (to avoid actuating without durable history). Sheet export errors are non-blocking.
 * `npm run rebuild-sheet` reloads the most recent `SHEET_SYNC_ROWS` records from MongoDB and overwrites the managed sheet tab.
@@ -113,7 +116,7 @@ Structured Outputs note: the OpenAI schema must avoid dynamic-key objects (no `a
 
 ## Actuation adapters (MVP)
 
-To keep the MVP deployable **without** fragile vendor auth flows, actuation is done via simple webhook adapters:
+To keep the MVP deployable **without** fragile vendor auth flows, actuation is done via webhook adapters or the bundled Alexa routine bridge:
 
 * Alexa / Transom: POST to `ALEXA_WEBHOOK_URL`
 * Meross plugs: POST to `MEROSS_WEBHOOK_URL`
@@ -121,10 +124,21 @@ To keep the MVP deployable **without** fragile vendor auth flows, actuation is d
 Each request includes a bearer token and a structured payload. You can implement the webhook receiver however you like:
 
 * Home Assistant webhook → automation
-* a tiny local service that calls `alexa-remote2` or a Meross library
+* the included Alexa routine bridge (below)
 * any other bridge
 
 When `DRY_RUN=true`, the service logs the actions but does not call webhooks.
+
+### Alexa routine bridge (alexa-remote2)
+
+The repo includes a minimal service (`npm run actuator-bridge`) that receives webhook payloads and triggers Alexa routines (preferred for both Transom AE fans and Meross plugs):
+
+* configure routine mappings in `config/alexa.routines.json` (keys like `KITCHEN_TRANSOM|ON|EXHAUST|LOW` → `"CS Kitchen Transom - EXHAUST - LOW"`)
+* supply an Alexa cookie via `ALEXA_COOKIE` or `ALEXA_COOKIE_JSON`, and set `ALEXA_ROUTINE_DEVICE_NAME` to the Echo device that should run routines
+* point `ALEXA_WEBHOOK_URL` / `MEROSS_WEBHOOK_URL` to the bridge (defaults: `http://localhost:8787/alexa` and `/meross`) and reuse the existing bearer tokens
+* list available routines with `npm run alexa:list-routines`
+
+The bridge validates bearer tokens, caches the routine list, maps requests to routine names/IDs, skips duplicate calls inside a short cooldown, and logs `{ routineInvoked }` for observability.
 
 ## Deploy to DigitalOcean + Dokku (outline)
 

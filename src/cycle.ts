@@ -14,6 +14,7 @@ import {
   cycleRecordToRow,
   overwriteSheet
 } from "./adapters/store/googleSheetsStore.js";
+import { buildPromptHistoryWindow } from "./history/promptHistory.js";
 import { buildPrompt } from "./llm/prompt.js";
 import { decideWithOpenAI } from "./llm/openaiDecider.js";
 import { applySanity } from "./policy/sanity.js";
@@ -63,68 +64,106 @@ function noopDecision(reason: string, speakers: string[]): Decision {
   };
 }
 
-async function actuate(cfg: AppConfig, decision: Decision, decisionId: string): Promise<ActuationResult> {
+function transomStateEqual(a?: Decision["actions"]["kitchen_transom"], b?: Decision["actions"]["kitchen_transom"]) {
+  if (!a || !b) return false;
+  return a.power === b.power && a.direction === b.direction && a.speed === b.speed && a.auto === b.auto && a.set_temp_f === b.set_temp_f;
+}
+
+function plugStateEqual(a?: Decision["actions"]["kitchen_vornado_630"], b?: Decision["actions"]["kitchen_vornado_630"]) {
+  if (!a || !b) return false;
+  return a.power === b.power;
+}
+
+async function actuate(
+  cfg: AppConfig,
+  decision: Decision,
+  decisionId: string,
+  lastApplied?: Decision["actions"]
+): Promise<ActuationResult> {
   const errors: string[] = [];
-  const applied = structuredClone(decision.actions);
+  const applied: Decision["actions"] = {
+    kitchen_transom: structuredClone(lastApplied?.kitchen_transom ?? decision.actions.kitchen_transom),
+    bathroom_transom: structuredClone(lastApplied?.bathroom_transom ?? decision.actions.bathroom_transom),
+    kitchen_vornado_630: structuredClone(lastApplied?.kitchen_vornado_630 ?? decision.actions.kitchen_vornado_630),
+    living_vornado_630: structuredClone(lastApplied?.living_vornado_630 ?? decision.actions.living_vornado_630)
+  };
 
   if (cfg.DRY_RUN) {
     return { applied, errors, actuation_ok: true };
   }
 
-  // Transoms (Alexa webhook)
-  try {
-    await setTransomState(
-      {
-        url: cfg.ALEXA_WEBHOOK_URL,
-        token: cfg.ALEXA_WEBHOOK_TOKEN,
-        dryRun: false,
-        timeoutMs: cfg.HTTP_TIMEOUT_MS
-      },
-      { device: "kitchen_transom", state: decision.actions.kitchen_transom, decisionId }
-    );
-  } catch (e: any) {
-    errors.push(`kitchen_transom: ${e?.message ?? String(e)}`);
+  const alexaDryRun = cfg.DRY_RUN || !cfg.ALEXA_WEBHOOK_URL;
+  const merossDryRun = cfg.DRY_RUN || !cfg.MEROSS_WEBHOOK_URL;
+
+  if (!cfg.ALEXA_WEBHOOK_URL && !cfg.DRY_RUN) {
+    errors.push("Transom actuator skipped: ALEXA_WEBHOOK_URL not configured");
   }
-  try {
-    await setTransomState(
-      {
-        url: cfg.ALEXA_WEBHOOK_URL,
-        token: cfg.ALEXA_WEBHOOK_TOKEN,
-        dryRun: false,
-        timeoutMs: cfg.HTTP_TIMEOUT_MS
-      },
-      { device: "bathroom_transom", state: decision.actions.bathroom_transom, decisionId }
-    );
-  } catch (e: any) {
-    errors.push(`bathroom_transom: ${e?.message ?? String(e)}`);
+  if (!cfg.MEROSS_WEBHOOK_URL && !cfg.DRY_RUN) {
+    errors.push("Plug actuator skipped: MEROSS_WEBHOOK_URL not configured");
+  }
+
+  // Transoms (Alexa webhook)
+  const transomDevices: ("kitchen_transom" | "bathroom_transom")[] = ["kitchen_transom", "bathroom_transom"];
+  for (const device of transomDevices) {
+    const requested = decision.actions[device];
+    const previous = lastApplied?.[device];
+    if (previous && transomStateEqual(previous, requested)) {
+      applied[device] = previous;
+      continue;
+    }
+
+    if (!cfg.ALEXA_WEBHOOK_URL && !cfg.DRY_RUN) {
+      applied[device] = previous ?? requested;
+      continue;
+    }
+
+    try {
+      await setTransomState(
+        {
+          url: cfg.ALEXA_WEBHOOK_URL,
+          token: cfg.ALEXA_WEBHOOK_TOKEN,
+          dryRun: alexaDryRun,
+          timeoutMs: cfg.HTTP_TIMEOUT_MS
+        },
+        { device, state: requested, decisionId }
+      );
+      applied[device] = requested;
+    } catch (e: any) {
+      applied[device] = previous ?? requested;
+      errors.push(`${device}: ${e?.message ?? String(e)}`);
+    }
   }
 
   // Meross plugs (webhook)
-  try {
-    await setPlugState(
-      {
-        url: cfg.MEROSS_WEBHOOK_URL,
-        token: cfg.MEROSS_WEBHOOK_TOKEN,
-        dryRun: false,
-        timeoutMs: cfg.HTTP_TIMEOUT_MS
-      },
-      { plug: "kitchen_vornado_630", state: decision.actions.kitchen_vornado_630, decisionId }
-    );
-  } catch (e: any) {
-    errors.push(`kitchen_vornado_630: ${e?.message ?? String(e)}`);
-  }
-  try {
-    await setPlugState(
-      {
-        url: cfg.MEROSS_WEBHOOK_URL,
-        token: cfg.MEROSS_WEBHOOK_TOKEN,
-        dryRun: false,
-        timeoutMs: cfg.HTTP_TIMEOUT_MS
-      },
-      { plug: "living_vornado_630", state: decision.actions.living_vornado_630, decisionId }
-    );
-  } catch (e: any) {
-    errors.push(`living_vornado_630: ${e?.message ?? String(e)}`);
+  const plugDevices: ("kitchen_vornado_630" | "living_vornado_630")[] = ["kitchen_vornado_630", "living_vornado_630"];
+  for (const plug of plugDevices) {
+    const requested = decision.actions[plug];
+    const previous = lastApplied?.[plug];
+    if (previous && plugStateEqual(previous, requested)) {
+      applied[plug] = previous;
+      continue;
+    }
+
+    if (!cfg.MEROSS_WEBHOOK_URL && !cfg.DRY_RUN) {
+      applied[plug] = previous ?? requested;
+      continue;
+    }
+
+    try {
+      await setPlugState(
+        {
+          url: cfg.MEROSS_WEBHOOK_URL,
+          token: cfg.MEROSS_WEBHOOK_TOKEN,
+          dryRun: merossDryRun,
+          timeoutMs: cfg.HTTP_TIMEOUT_MS
+        },
+        { plug, state: requested, decisionId }
+      );
+      applied[plug] = requested;
+    } catch (e: any) {
+      applied[plug] = previous ?? requested;
+      errors.push(`${plug}: ${e?.message ?? String(e)}`);
+    }
   }
 
   return { applied, errors, actuation_ok: errors.length === 0 };
@@ -233,15 +272,13 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
   const telemetry = summarizeTelemetry(promptAssets.siteConfig, sensors!);
   const features = telemetry.features;
 
-  let historyForPrompt: string[][] = [sheetHeader];
+  let historyRecords: CycleRecord[] = [];
   if (mongoStore) {
     try {
-      const historyRecords = await getRecentCycleRecords(
+      historyRecords = await getRecentCycleRecords(
         mongoStore,
-        cfg.HISTORY_MODE === "window" ? cfg.HISTORY_ROWS : undefined
+        cfg.HISTORY_MODE === "window" ? Math.max(cfg.HISTORY_ROWS, cfg.PROMPT_HISTORY_MAX_ROWS) : undefined
       );
-      const rowsForPrompt = historyRecords.map((rec) => cycleRecordToRow(rec, promptAssets.siteConfig, sheetHeader));
-      historyForPrompt = [sheetHeader, ...rowsForPrompt.map((row) => row.map((cell) => String(cell ?? "")))];
     } catch (e: any) {
       const msg = `Failed to read Mongo history: ${e?.message ?? String(e)}`;
       logger.error({ err: e }, msg);
@@ -249,12 +286,21 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
     }
   }
 
+  const promptHistory = buildPromptHistoryWindow({
+    records: historyRecords,
+    siteConfig: promptAssets.siteConfig,
+    maxRows: cfg.PROMPT_HISTORY_MAX_ROWS,
+    maxMinutes: cfg.PROMPT_HISTORY_MAX_MINUTES,
+    summaryMaxChars: cfg.PROMPT_HISTORY_SUMMARY_MAX_CHARS
+  });
+
   const { prompt, promptVersion, siteConfigId } = buildPrompt({
     weather: weather!,
     sensors: sensors!,
     telemetry,
     features,
-    historyRows: historyForPrompt,
+    historyRows: promptHistory.historyRows,
+    historySummary: promptHistory.historySummary,
     timezone: siteTimezone,
     promptMaxChars: cfg.PROMPT_MAX_CHARS,
     promptAssets
@@ -289,7 +335,7 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
   if (blockingErrors.length > 0 || decisionErrors.length > 0) {
     actuation = { applied: decision.actions, errors: [...blockingErrors, ...decisionErrors], actuation_ok: false };
   } else {
-    actuation = await actuate(cfg, decision, decision_id);
+    actuation = await actuate(cfg, decision, decision_id, promptHistory.lastApplied);
   }
   actuation.errors.push(...nonBlockingErrors);
 

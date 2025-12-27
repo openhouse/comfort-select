@@ -3,7 +3,7 @@ import { absoluteHumidityGm3, dewPointF } from "../utils/psychrometrics.js";
 import { PromptAssets } from "../promptAssets.js";
 import { summarizeTelemetry } from "../utils/telemetry.js";
 import { SiteConfig } from "../siteConfig.js";
-import { buildSheetHeader } from "../adapters/store/googleSheetsStore.js";
+import { buildPromptHistoryHeader } from "../history/promptHistory.js";
 
 function toCsv(rows: string[][]): string {
   return rows
@@ -126,6 +126,7 @@ export function buildPrompt(params: {
   promptMaxChars?: number;
   timezone: string;
   promptAssets: PromptAssets;
+  historySummary?: string;
 }): { prompt: string; promptVersion: string; siteConfigId: string } {
   const {
     weather,
@@ -146,7 +147,7 @@ export function buildPrompt(params: {
   const adjacency = buildAdjacency(promptAssets.siteConfig);
   const featureList = formatFeatures(features, promptAssets.siteConfig);
 
-  const fallbackHeader = buildSheetHeader(promptAssets.siteConfig);
+  const fallbackHeader = buildPromptHistoryHeader(promptAssets.siteConfig);
   const rowsForCsv = normalizeHistoryRows(historyRows, fallbackHeader);
   const header = rowsForCsv[0] ?? [];
   const dataRows = rowsForCsv.slice(1);
@@ -166,7 +167,8 @@ export function buildPrompt(params: {
         weatherLine: buildWeatherLine(weather),
         sensorsObservedAt: sensors.observation_time_utc,
         roomSummaries: telemetry.rooms,
-        historyCsv
+        historyCsv,
+        historySummary: params.historySummary ?? ""
       }
     });
 
