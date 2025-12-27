@@ -3,8 +3,9 @@ import { loadPromptAssetsFromConfig } from "../src/promptAssets.js";
 import { buildPrompt } from "../src/llm/prompt.js";
 import { getSensorsNowFromMock } from "../src/adapters/sensors/ecowittLocal.js";
 import { getWeatherNow } from "../src/adapters/weather/openMeteo.js";
-import { buildSheetHeader } from "../src/adapters/store/googleSheetsStore.js";
+import { buildPromptHistoryHeader, buildPromptHistoryWindow } from "../src/history/promptHistory.js";
 import { summarizeTelemetry } from "../src/utils/telemetry.js";
+import { getRecentCycleRecords, initMongo } from "../src/adapters/store/mongoStore.js";
 
 const cfg = loadConfig();
 const promptAssets = loadPromptAssetsFromConfig(cfg);
@@ -34,15 +35,42 @@ try {
   };
 }
 
-const sheetHeader = buildSheetHeader(promptAssets.siteConfig);
 const telemetry = summarizeTelemetry(promptAssets.siteConfig, sensors);
+
+let historyRows = [buildPromptHistoryHeader(promptAssets.siteConfig)];
+let historySummary = "No history available for prompt (Mongo not configured?).";
+
+try {
+  const mongo = await initMongo({
+    uri: cfg.MONGODB_URI,
+    dbName: cfg.MONGODB_DB_NAME,
+    collectionName: cfg.MONGODB_COLLECTION
+  });
+  const records = await getRecentCycleRecords(
+    mongo,
+    Math.max(cfg.HISTORY_ROWS, cfg.PROMPT_HISTORY_MAX_ROWS)
+  );
+  const window = buildPromptHistoryWindow({
+    records,
+    siteConfig: promptAssets.siteConfig,
+    maxRows: cfg.PROMPT_HISTORY_MAX_ROWS,
+    maxMinutes: cfg.PROMPT_HISTORY_MAX_MINUTES,
+    summaryMaxChars: cfg.PROMPT_HISTORY_SUMMARY_MAX_CHARS
+  });
+  historyRows = window.historyRows;
+  historySummary = window.historySummary;
+} catch (err: any) {
+  // eslint-disable-next-line no-console
+  console.warn(`Using header-only history: ${err?.message ?? err}`);
+}
 
 const { prompt } = buildPrompt({
   weather: weather,
   sensors,
   telemetry,
   features: telemetry.features,
-  historyRows: [Array.from(sheetHeader)],
+  historyRows,
+  historySummary,
   timezone: promptAssets.siteConfig.site.timezone ?? cfg.TIMEZONE,
   promptMaxChars: cfg.PROMPT_MAX_CHARS,
   promptAssets

@@ -24,6 +24,9 @@ const EnvSchema = z.object({
   HISTORY_MODE: z.enum(["full", "window"]).default("window"),
   HISTORY_ROWS: z.coerce.number().int().positive().default(200),
   PROMPT_MAX_CHARS: z.coerce.number().int().positive().default(120_000),
+  PROMPT_HISTORY_MAX_ROWS: z.coerce.number().int().positive().default(120),
+  PROMPT_HISTORY_MAX_MINUTES: z.coerce.number().int().positive().default(180),
+  PROMPT_HISTORY_SUMMARY_MAX_CHARS: z.coerce.number().int().positive().default(1200),
   SHEET_SYNC_ROWS: z.coerce.number().int().positive().default(2000),
 
   HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
