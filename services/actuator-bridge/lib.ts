@@ -1,36 +1,45 @@
 import fs from "node:fs/promises";
-import path from "node:path";
 import { promisify } from "node:util";
 import AlexaRemote from "alexa-remote2";
 import type { Logger } from "pino";
+import { extractCookieString, extractCsrf, getCookiePath, loadCookieData, maybeRefreshCookieData, saveCookieData } from "./cookieStore.js";
+import { resolveFromRepo } from "./env.js";
 
 export type RoutineMap = Record<string, string>;
 
-async function loadCookie(logger: Logger): Promise<string> {
+async function loadCookie(logger: Logger): Promise<{ cookie: string; csrf?: string }> {
   if (process.env.ALEXA_COOKIE && process.env.ALEXA_COOKIE.trim().length > 0) {
-    return process.env.ALEXA_COOKIE;
+    return { cookie: process.env.ALEXA_COOKIE };
   }
 
-  const cookieJsonPath = process.env.ALEXA_COOKIE_JSON;
-  if (cookieJsonPath) {
-    const resolved = path.resolve(cookieJsonPath);
-    try {
-      const raw = await fs.readFile(resolved, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (typeof parsed === "string") return parsed;
-      if (parsed.cookie) return parsed.cookie;
-      throw new Error(`Cookie JSON missing 'cookie' property (${resolved})`);
-    } catch (err: any) {
-      logger.error({ err, resolved }, "Unable to load Alexa cookie JSON file");
-      throw err;
+  const cookieJsonPath = getCookiePath();
+  try {
+    const parsed = await loadCookieData(logger);
+    const refreshed = parsed ? await maybeRefreshCookieData(parsed, logger) : null;
+    const data = refreshed ?? parsed;
+    if (data && refreshed) {
+      await saveCookieData(cookieJsonPath, data);
     }
+    const cookieString = extractCookieString(data);
+    if (!cookieString) {
+      throw new Error(`Cookie JSON missing 'cookie', 'localCookie', or 'loginCookie' property (${cookieJsonPath})`);
+    }
+    return { cookie: cookieString, csrf: extractCsrf(data) };
+  } catch (err: any) {
+    logger.error({ err, resolved: cookieJsonPath }, "Unable to load Alexa cookie JSON file");
+    if (err?.code === "ENOENT") {
+      throw new Error(
+        `Alexa cookie file not found at ${cookieJsonPath}. Run 'npm run alexa:cookie:init' to generate it.`
+      );
+    }
+    throw err;
   }
 
   throw new Error("ALEXA_COOKIE or ALEXA_COOKIE_JSON is required for alexa-remote2");
 }
 
 export async function loadRoutineMap(mapPath: string, logger: Logger): Promise<RoutineMap> {
-  const resolved = path.resolve(mapPath);
+  const resolved = resolveFromRepo(mapPath);
   try {
     const raw = await fs.readFile(resolved, "utf-8");
     const parsed = JSON.parse(raw);
@@ -47,16 +56,18 @@ export async function loadRoutineMap(mapPath: string, logger: Logger): Promise<R
 
 export async function initAlexaRemote(logger: Logger): Promise<{ alexa: any; routines: any[] }> {
   const alexa = new AlexaRemote();
-  const cookie = await loadCookie(logger);
+  const { cookie, csrf } = await loadCookie(logger);
   const amazonPage = process.env.ALEXA_AMAZON_DOMAIN ?? "amazon.com";
+  const acceptLanguage = process.env.ALEXA_ACCEPT_LANGUAGE ?? "en-US";
   const userAgent = process.env.ALEXA_USER_AGENT ?? "comfort-select-actuator-bridge";
 
   await new Promise<void>((resolve, reject) => {
     alexa.init(
       {
         cookie,
+        csrf,
         amazonPage,
-        acceptLanguage: "en-US",
+        acceptLanguage,
         userAgent,
         useWsMqtt: false
       },

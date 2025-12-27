@@ -1,6 +1,7 @@
 import express from "express";
 import { promisify } from "node:util";
 import pino from "pino";
+import { resolveFromRepo } from "./env.js";
 import {
   buildPlugRoutineKey,
   buildTransomRoutineKey,
@@ -15,7 +16,7 @@ const logger = pino({ name: "actuator-bridge" });
 const ALEXA_TOKEN = process.env.ALEXA_WEBHOOK_TOKEN;
 const MEROSS_TOKEN = process.env.MEROSS_WEBHOOK_TOKEN;
 const ROUTINE_DEVICE = process.env.ALEXA_ROUTINE_DEVICE_NAME ?? "ALEXA_CURRENT_DEVICE";
-const MAP_PATH = process.env.ALEXA_ROUTINE_MAP_PATH ?? "./config/alexa.routines.json";
+const MAP_PATH = resolveFromRepo(process.env.ALEXA_ROUTINE_MAP_PATH ?? "./config/alexa.routines.json");
 const PORT = Number(process.env.ACTUATOR_BRIDGE_PORT ?? 8787);
 const COOLDOWN_MS = Number(process.env.ALEXA_ROUTINE_COOLDOWN_MS ?? 120_000) || 120_000;
 

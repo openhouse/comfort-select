@@ -1,3 +1,4 @@
+import "../_load-env.js";
 import pino from "pino";
 import { initAlexaRemote, routineId } from "../../services/actuator-bridge/lib.js";
 
