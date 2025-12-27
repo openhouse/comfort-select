@@ -4,3 +4,5 @@
 .DS_Store
 *.log
 config/sites/*.local.json
+config/secrets/**
+!config/secrets/.gitkeep
