@@ -1,5 +1,5 @@
-import { CycleRecord, Decision, PlugState, TransomState } from "../types.js";
-import { SiteConfig, Sensor } from "../siteConfig.js";
+import { CycleRecord, Decision, PlugState, Sensor, TransomState } from "../types.js";
+import { SiteConfig } from "../siteConfig.js";
 
 function pickSensorsForPrompt(siteConfig: SiteConfig): Sensor[] {
   const prioritized = siteConfig.sensors.filter(

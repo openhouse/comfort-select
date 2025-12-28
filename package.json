@@ -2,7 +2,7 @@
   "name": "comfort-select",
   "version": "0.1.0",
   "private": true,
-  "description": "196 Clinton Ave Apt D43 comfort control loop (weather + sensors + LLM + Alexa/Meross + Google Sheets)",
+  "description": "Comfort-select control loop (weather + sensors + LLM + Alexa/Meross + Google Sheets)",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -14,7 +14,10 @@
     "rebuild-sheet": "tsx scripts/rebuild-sheet.ts",
     "print-prompt": "tsx scripts/print-prompt.ts",
     "test": "tsx --test src/llm/schema.test.ts src/adapters/sensors/ecowittCloud.test.ts src/history/promptHistory.test.ts",
-    "actuator-bridge": "tsx services/actuator-bridge/index.ts",
+    "actuator-bridge": "npm run dev:actuator-bridge",
+    "dev:actuator-bridge": "tsx services/actuator-bridge/index.ts",
+    "start:actuator-bridge": "node dist/services/actuator-bridge/index.js",
+    "dev:all": "concurrently -k \"npm run dev\" \"npm run dev:actuator-bridge\"",
     "alexa:list-routines": "tsx scripts/alexa/list-routines.ts",
     "alexa:cookie:init": "tsx scripts/alexa/cookie-init.ts",
     "alexa:cookie:refresh": "tsx scripts/alexa/cookie-refresh.ts",
@@ -39,6 +42,7 @@
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^22.10.1",
+    "concurrently": "^9.1.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }

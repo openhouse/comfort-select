@@ -23,6 +23,7 @@ export type AlexaCookieData =
     };
 
 const DEFAULT_COOKIE_PATH = "./config/secrets/alexa-cookie.json";
+const TOKEN_REDACTION_REGEX = /(session|token|cookie|atna|atnr)[^\\s\"']*/gi;
 
 export function getCookiePath(): string {
   const envPath = process.env.ALEXA_COOKIE_PATH ?? process.env.ALEXA_COOKIE_JSON ?? DEFAULT_COOKIE_PATH;
@@ -68,12 +69,15 @@ export async function maybeRefreshCookieData(data: AlexaCookieData, logger?: Log
   if (typeof AlexaCookie.refreshAlexaCookie !== "function") return null;
   if (!data.refreshToken || !data.loginCookie) return null;
 
+  const debugAlexa = (process.env.DEBUG_ALEXA === "1" || process.env.DEBUG_ALEXA?.toLowerCase() === "true") ?? false;
+  const sanitize = (msg: unknown) => String(msg ?? "").replace(TOKEN_REDACTION_REGEX, "[REDACTED]");
+
   const options = {
     formerRegistrationData: data,
     amazonPage: process.env.ALEXA_AMAZON_DOMAIN ?? process.env.ALEXA_AMAZON_PAGE ?? "amazon.com",
     baseAmazonPage: process.env.ALEXA_AMAZON_DOMAIN ?? process.env.ALEXA_AMAZON_PAGE ?? "amazon.com",
     acceptLanguage: process.env.ALEXA_ACCEPT_LANGUAGE ?? "en-US",
-    logger: logger ? (msg: unknown) => logger.info(String(msg)) : undefined
+    logger: debugAlexa && logger ? (msg: unknown) => logger.debug({ msg: sanitize(msg) }, "Alexa cookie debug") : undefined
   };
 
   return await new Promise((resolve) => {
@@ -84,7 +88,11 @@ export async function maybeRefreshCookieData(data: AlexaCookieData, logger?: Log
           return resolve(null);
         }
         logger?.info("Refreshed Alexa cookie using stored registration data");
-        resolve({ ...refreshed, refreshedAt: new Date().toISOString() });
+        const refreshedValue =
+          typeof refreshed === "object" && refreshed !== null
+            ? refreshed
+            : { cookie: String(refreshed) };
+        resolve({ ...refreshedValue, refreshedAt: new Date().toISOString() });
       });
     } catch (err) {
       logger?.warn({ err }, "Alexa cookie refresh attempt threw; falling back to existing data");

@@ -1,6 +1,6 @@
 {
-  "name": "comfort-196",
-  "description": "196 Clinton Ave comfort control loop",
+  "name": "comfort-select",
+  "description": "Comfort-select control loop",
   "keywords": [
     "iot",
     "openai",
@@ -18,11 +18,11 @@
     },
     "HOME_LAT": {
       "description": "Latitude",
-      "value": "40.692"
+      "value": "40"
     },
     "HOME_LON": {
       "description": "Longitude",
-      "value": "-73.969306"
+      "value": "-73"
     },
     "OPENAI_API_KEY": {
       "description": "OpenAI API key"
@@ -30,6 +30,18 @@
     "OPENAI_MODEL": {
       "description": "OpenAI model",
       "value": "gpt-5.2"
+    },
+    "OPENAI_DECISION_MODEL": {
+      "description": "Optional faster/cheaper model for decisions",
+      "value": "gpt-4o-mini"
+    },
+    "OPENAI_TIMEOUT_MS": {
+      "description": "OpenAI SDK timeout in milliseconds",
+      "value": "120000"
+    },
+    "OPENAI_MAX_RETRIES": {
+      "description": "OpenAI SDK max retries",
+      "value": "2"
     },
     "PROMPT_TEMPLATE_PATH": {
       "description": "Path to Handlebars prompt template",
@@ -120,6 +132,10 @@
     },
     "MEROSS_WEBHOOK_TOKEN": {
       "description": "Auth token for Meross webhook"
+    },
+    "ROUTINE_MAP_PATH": {
+      "description": "Path to Alexa routine map (or use ALEXA_ROUTINE_MAP_PATH)",
+      "value": "./config/alexa.routines.json"
     },
     "PORT": {
       "description": "HTTP port",

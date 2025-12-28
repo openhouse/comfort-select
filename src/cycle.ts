@@ -315,8 +315,9 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
       const { decision: llmDecision, responseId } = await decideWithOpenAI(
         {
           apiKey: cfg.OPENAI_API_KEY,
-          model: cfg.OPENAI_MODEL,
-          timeoutMs: cfg.HTTP_TIMEOUT_MS * 3,
+          model: cfg.OPENAI_DECISION_MODEL ?? cfg.OPENAI_MODEL,
+          timeoutMs: cfg.OPENAI_TIMEOUT_MS,
+          maxRetries: cfg.OPENAI_MAX_RETRIES,
           curatorLabels: promptAssets.curatorLabels
         },
         prompt

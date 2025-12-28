@@ -1,0 +1,11 @@
+{
+  "sensors": [
+    { "id": "kitchen_main", "tempKey": "temp1f", "humidityKey": "humidity1" },
+    { "id": "living_center", "tempKey": "temp2f", "humidityKey": "humidity2" },
+    { "id": "bedroom_main", "tempKey": "temp3f", "humidityKey": "humidity3" },
+    { "id": "bathroom_main", "tempKey": "temp4f", "humidityKey": "humidity4" },
+    { "id": "front_hall_main", "tempKey": "temp5f", "humidityKey": "humidity5" },
+    { "id": "back_hall_main", "tempKey": "temp6f", "humidityKey": "humidity6" },
+    { "id": "living_radiator", "tempKey": "temp7f", "humidityKey": "humidity7" }
+  ]
+}
