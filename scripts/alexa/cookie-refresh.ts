@@ -57,7 +57,8 @@ async function refreshCookie() {
   await writeCookieFile(refreshed);
 }
 
-refreshCookie().catch((err) => 
+refreshCookie().catch((err) => {
   // eslint-disable-next-line no-console
-  console.error("[alexa-cookie] Failed to refresh cookie:", err) || process.exit(1)
-);
+  console.error("[alexa-cookie] Failed to refresh cookie:", err);
+  process.exit(1);
+});

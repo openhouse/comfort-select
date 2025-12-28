@@ -38,7 +38,7 @@ async function loadCookie(logger: Logger): Promise<{ cookie: string; csrf?: stri
   throw new Error("ALEXA_COOKIE or ALEXA_COOKIE_JSON is required for alexa-remote2");
 }
 
-export async function loadRoutineMap(mapPath: string, logger: Logger): Promise<RoutineMap> {
+export async function loadRoutineMap(mapPath: string, logger: Logger, checkedEnvVars: string[] = []): Promise<RoutineMap> {
   const resolved = resolveFromRepo(mapPath);
   try {
     const raw = await fs.readFile(resolved, "utf-8");
@@ -49,9 +49,23 @@ export async function loadRoutineMap(mapPath: string, logger: Logger): Promise<R
     }
     return mappings;
   } catch (err: any) {
-    logger.warn({ err, mapPath: resolved }, "Falling back to empty routine map");
-    return {};
+    const envHint = checkedEnvVars.length > 0 ? checkedEnvVars.join(",") : "ROUTINE_MAP_PATH,ALEXA_ROUTINE_MAP_PATH";
+    const example = "ROUTINE_MAP_PATH=./config/alexa.routines.json";
+    const message = `Failed to load Alexa routine map from ${resolved}. Checked env vars: ${envHint}. Example: ${example}`;
+    logger.error({ err, resolved, checkedEnvVars }, message);
+    throw new Error(message, { cause: err });
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 }
 
 export async function initAlexaRemote(logger: Logger): Promise<{ alexa: any; routines: any[] }> {
@@ -60,26 +74,33 @@ export async function initAlexaRemote(logger: Logger): Promise<{ alexa: any; rou
   const amazonPage = process.env.ALEXA_AMAZON_DOMAIN ?? "amazon.com";
   const acceptLanguage = process.env.ALEXA_ACCEPT_LANGUAGE ?? "en-US";
   const userAgent = process.env.ALEXA_USER_AGENT ?? "comfort-select-actuator-bridge";
+  const initTimeoutMs = Number(process.env.ALEXA_INIT_TIMEOUT_MS ?? 60_000) || 60_000;
 
-  await new Promise<void>((resolve, reject) => {
-    alexa.init(
-      {
+  await withTimeout(
+    new Promise<void>((resolve, reject) => {
+      const initOptions: any = {
         cookie,
         csrf,
         amazonPage,
         acceptLanguage,
         userAgent,
         useWsMqtt: false
-      },
-      (err: any) => {
+      };
+      alexa.init(initOptions, (err: any) => {
         if (err) reject(err);
         else resolve();
-      }
-    );
-  });
+      });
+    }),
+    initTimeoutMs,
+    "alexa.init"
+  );
 
   const getAutomationRoutines = promisify(alexa.getAutomationRoutines).bind(alexa);
-  const routineResponse = await getAutomationRoutines(2000);
+  const routineResponse: any = await withTimeout(
+    getAutomationRoutines(2000),
+    initTimeoutMs,
+    "alexa.getAutomationRoutines"
+  );
   const routines = Array.isArray(routineResponse?.automationRoutines)
     ? routineResponse.automationRoutines
     : Array.isArray(routineResponse?.routines)

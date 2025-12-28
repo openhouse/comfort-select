@@ -12,6 +12,9 @@ const EnvSchema = z.object({
 
   OPENAI_API_KEY: z.string().min(1),
   OPENAI_MODEL: z.string().default("gpt-5.2"),
+  OPENAI_DECISION_MODEL: z.string().optional(),
+  OPENAI_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
+  OPENAI_MAX_RETRIES: z.coerce.number().int().nonnegative().default(2),
 
   PROMPT_TEMPLATE_PATH: z.string().default("./config/prompt/llm-prompt-template.md.hbs"),
   SITE_CONFIG_PATH: z.string().default("./config/site.config.json"),
