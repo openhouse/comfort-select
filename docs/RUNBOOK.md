@@ -26,6 +26,7 @@ Environment used for verification:
 - The actuator bridge binds its port immediately; readiness flips true only after Alexa init + routine map load.
 - Routine map resolution order: `ROUTINE_MAP_PATH` → `ALEXA_ROUTINE_MAP_PATH` → `./config/alexa.routines.json`.
 - Sensitive cookies/tokens are redacted by default; set `DEBUG_ALEXA=1` only when sanitised debug logs are acceptable.
+- Alexa auth + routines calls now share the same cookie/CSRF headers and default to a 120s init timeout. For regional hosts set `ALEXA_SERVICE_HOST` (e.g., `pitangui.amazon.com`) and use `ALEXA_HTTP_TRACE=1` to capture status/content-type/body previews for each call. Responses are written to `./debug/` when parsing fails.
 - For deployment, Procfile includes both the main web process and an `actuator` process that runs the compiled bridge (`npm run start:actuator-bridge`).
 
 ## Example smoke test

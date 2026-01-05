@@ -23,7 +23,12 @@ export type AlexaCookieData =
     };
 
 const DEFAULT_COOKIE_PATH = "./config/secrets/alexa-cookie.json";
-const TOKEN_REDACTION_REGEX = /(session|token|cookie|atna|atnr)[^\\s\"']*/gi;
+export const TOKEN_REDACTION_REGEX = /(session|token|cookie|atna|atnr|macdms)[^\\s\"']*/gi;
+
+export function sanitizeForLogs(value: string | undefined): string {
+  if (!value) return "";
+  return value.replace(TOKEN_REDACTION_REGEX, "[REDACTED]");
+}
 
 export function getCookiePath(): string {
   const envPath = process.env.ALEXA_COOKIE_PATH ?? process.env.ALEXA_COOKIE_JSON ?? DEFAULT_COOKIE_PATH;
