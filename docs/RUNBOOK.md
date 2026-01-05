@@ -35,3 +35,25 @@ After starting the actuator bridge:
 curl -sS http://127.0.0.1:8787/healthz | jq .
 curl -sS http://127.0.0.1:8787/readyz | jq .
 ```
+
+### Alexa routine bridge examples
+
+Power-only device (e.g., Vornado 630 smart plug) via the unified Alexa endpoint:
+```bash
+TOKEN="$ALEXA_WEBHOOK_TOKEN"
+curl -sS -X POST "http://127.0.0.1:8787/alexa" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"device":"KITCHEN_VORNADO_630","state":{"power":"ON"}}'
+```
+
+Transom actuation with full state:
+```bash
+TOKEN="$ALEXA_WEBHOOK_TOKEN"
+curl -sS -X POST "http://127.0.0.1:8787/alexa" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"device":"KITCHEN_TRANSOM","state":{"power":"ON","direction":"EXHAUST","speed":"LOW"}}'
+```
+
+`/meross` remains available for backward compatibility and accepts either `plug` or `device` fields plus `state.power`.
