@@ -16,6 +16,11 @@ import {
 import { resolveFromRepo } from "./env.js";
 
 export type RoutineMap = Record<string, string>;
+export type RoutineState = {
+  power?: string;
+  direction?: string;
+  speed?: string;
+};
 
 const DEFAULT_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
@@ -337,17 +342,37 @@ export function routineId(routine: any): string | undefined {
   return routine?.automationId ?? routine?.behaviorId ?? routine?.routineId ?? routine?.id;
 }
 
-export function resolveRoutine(routines: any[], target: string, logger: Logger): any | null {
+export function resolveRoutine(
+  routines: any[],
+  target: string,
+  logger: Logger,
+  opts?: { quiet?: boolean }
+): any | null {
   const found =
     routines.find((r) => r.name === target || r.automationName === target || routineId(r) === target) ??
     routines.find((r) => routineId(r)?.includes(target));
-  if (!found) {
+  if (!found && !opts?.quiet) {
     logger.warn({ target }, "Routine not found");
   }
   return found ?? null;
 }
 
-export function buildTransomRoutineKey(deviceId: string, state: { power?: string; direction?: string; speed?: string }): string {
+export function normalizeRoutineState(state: unknown): RoutineState {
+  if (typeof state === "string") {
+    return { power: state.toUpperCase() };
+  }
+  if (!state || typeof state !== "object") {
+    return {};
+  }
+  const power = typeof (state as any).power === "string" ? (state as any).power : (state as any).state;
+  return {
+    power: typeof power === "string" ? power.toUpperCase() : undefined,
+    direction: typeof (state as any).direction === "string" ? (state as any).direction.toUpperCase() : undefined,
+    speed: typeof (state as any).speed === "string" ? (state as any).speed.toUpperCase() : undefined
+  };
+}
+
+export function buildTransomRoutineKey(deviceId: string, state: RoutineState): string {
   if ((state.power ?? "").toUpperCase() === "OFF") {
     return `${deviceId}|OFF`.toUpperCase();
   }
@@ -356,10 +381,32 @@ export function buildTransomRoutineKey(deviceId: string, state: { power?: string
   return `${deviceId}|${state.power ?? ""}|${direction}|${speed}`.toUpperCase();
 }
 
-export function buildPlugRoutineKey(plugId: string, state: { power?: string }): string {
+export function buildPlugRoutineKey(plugId: string, state: RoutineState): string {
   return `${plugId}|${state.power ?? ""}`.toUpperCase();
 }
 
 export function describeRoutine(routine: any): { id?: string; name?: string } {
   return { id: routineId(routine), name: routine?.name ?? routine?.automationName };
+}
+
+function trimEmptySegments(key: string): string {
+  const segments = key.split("|");
+  while (segments.length > 0 && segments[segments.length - 1] === "") {
+    segments.pop();
+  }
+  return segments.join("|");
+}
+
+export function buildRoutineCandidateKeys(deviceId: string, state: RoutineState): string[] {
+  const normalizedDevice = deviceId.toUpperCase();
+  const transomKey = buildTransomRoutineKey(normalizedDevice, state);
+  const trimmed = trimEmptySegments(transomKey);
+  const plugKey = buildPlugRoutineKey(normalizedDevice, state);
+  const keys = [transomKey, trimmed, plugKey];
+  const seen = new Set<string>();
+  return keys.filter((key) => {
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return key.length > 0;
+  });
 }

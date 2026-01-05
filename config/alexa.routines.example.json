@@ -20,9 +20,9 @@
     "BATHROOM_TRANSOM|ON|DIRECT|HIGH": "Example Bathroom Transom - DIRECT - HIGH",
     "BATHROOM_TRANSOM|ON|DIRECT|TURBO": "Example Bathroom Transom - DIRECT - TURBO",
 
-    "LIVING_VORNADO_630|ON": "Example Living 630 - ON",
-    "LIVING_VORNADO_630|OFF": "Example Living 630 - OFF",
-    "KITCHEN_VORNADO_630|ON": "Example Kitchen 630 - ON",
-    "KITCHEN_VORNADO_630|OFF": "Example Kitchen 630 - OFF"
+    "LIVING_VORNADO_630|ON": "amzn1.alexa.automation.example-living-630-on-id",
+    "LIVING_VORNADO_630|OFF": "amzn1.alexa.automation.example-living-630-off-id",
+    "KITCHEN_VORNADO_630|ON": "amzn1.alexa.automation.example-kitchen-630-on-id",
+    "KITCHEN_VORNADO_630|OFF": "amzn1.alexa.automation.example-kitchen-630-off-id"
   }
 }
