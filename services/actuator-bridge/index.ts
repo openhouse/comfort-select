@@ -5,11 +5,12 @@ import pino from "pino";
 import { resolveFromRepo } from "./env.js";
 import {
   RoutineMap,
-  buildPlugRoutineKey,
-  buildTransomRoutineKey,
+  RoutineState,
+  buildRoutineCandidateKeys,
   describeRoutine,
   initAlexaRemote,
   loadRoutineMap,
+  normalizeRoutineState,
   resolveRoutine
 } from "./lib.js";
 
@@ -116,12 +117,60 @@ let routines: any[] = [];
 let routineMap: RoutineMap = {};
 let executeRoutine: ((serialOrName: string, routine: any) => Promise<void>) | null = null;
 let initializing = false;
+let routineValidation: { missing: Array<{ key: string; target: string }>; resolved: number; total: number } = {
+  missing: [],
+  resolved: 0,
+  total: 0
+};
 
 const lastApplied = new Map<string, { key: string; ts: number }>();
 
 function readyState() {
   const ready = alexaReady && routineMapReady;
   return { ready, alexaReady, routineMapReady, lastInitError };
+}
+
+function validateRoutineMap(map: RoutineMap, discoveredRoutines: any[]): void {
+  const missing: Array<{ key: string; target: string }> = [];
+  let resolved = 0;
+  for (const [key, target] of Object.entries(map)) {
+    const routine = resolveRoutine(discoveredRoutines, target, logger, { quiet: true });
+    if (routine) resolved += 1;
+    else missing.push({ key, target });
+  }
+
+  routineValidation = { missing, resolved, total: Object.keys(map).length };
+
+  if (missing.length > 0) {
+    logger.warn(
+      {
+        missingMappingsCount: missing.length,
+        missingMappingsSample: missing.slice(0, 5),
+        totalMappings: Object.keys(map).length,
+        routinesDiscovered: discoveredRoutines.length
+      },
+      "Routine map contains entries that were not found among loaded routines"
+    );
+  } else {
+    logger.info({ totalMappings: Object.keys(map).length }, "All routine map entries resolved against loaded routines");
+  }
+}
+
+function pickRoutineMapping(deviceId: string, state: RoutineState): {
+  routineKey?: string;
+  routineTarget?: string;
+  candidateKeys: string[];
+  normalizedState: RoutineState;
+} {
+  const normalizedState = normalizeRoutineState(state);
+  const candidateKeys = buildRoutineCandidateKeys(deviceId, normalizedState);
+  for (const key of candidateKeys) {
+    const target = routineMap[key];
+    if (target) {
+      return { routineKey: key, routineTarget: target, candidateKeys, normalizedState };
+    }
+  }
+  return { candidateKeys, normalizedState };
 }
 
 app.get("/healthz", (_req, res) => {
@@ -134,6 +183,8 @@ app.get("/healthz", (_req, res) => {
     lastInitError,
     routines: routines.length,
     mapped: Object.keys(routineMap).length,
+    mapped_resolved: routineValidation.resolved,
+    mapped_missing: routineValidation.missing.length,
     cooldown_ms: COOLDOWN_MS,
     port: PORT
   });
@@ -148,33 +199,43 @@ app.get("/readyz", (_req, res) => {
     routineMapReady,
     lastInitError,
     routines: routines.length,
-    mapped: Object.keys(routineMap).length
+    mapped: Object.keys(routineMap).length,
+    mapped_resolved: routineValidation.resolved,
+    mapped_missing: routineValidation.missing.length
   };
   if (!ready) return res.status(503).json(body);
   return res.json(body);
 });
 
 app.post("/alexa", requireToken(ALEXA_TOKEN), requireReady(), async (req, res) => {
-  const { device, state, decision_id, correlationId } = req.body ?? {};
-  if (!device || !state) {
+  const { device: deviceRaw, plug: plugRaw, state, decision_id, correlationId } = req.body ?? {};
+  const device = (deviceRaw ?? plugRaw)?.toString();
+  const deviceId = device?.toUpperCase();
+
+  if (!deviceId || state === undefined) {
     return res.status(400).json({ ok: false, error: "device and state are required" });
   }
 
-  const routineKey = buildTransomRoutineKey(device, state);
-  const routineName = routineMap[routineKey];
-  if (!routineName) {
+  const { routineKey, routineTarget, candidateKeys, normalizedState } = pickRoutineMapping(deviceId, state);
+  if (!routineKey || !routineTarget) {
+    return res.status(404).json({
+      ok: false,
+      error: `No routine mapping for keys ${candidateKeys.join(",")}`,
+      candidateKeys,
+      normalizedState,
+      correlationId: decision_id ?? correlationId
+    });
+  }
+
+  const routine = resolveRoutine(routines, routineTarget, logger);
+  if (!routine) {
     return res
       .status(404)
-      .json({ ok: false, error: `No routine mapping for key ${routineKey}`, correlationId: decision_id ?? correlationId });
+      .json({ ok: false, error: `Routine not found: ${routineTarget}`, correlationId: decision_id ?? correlationId });
   }
 
-  const routine = resolveRoutine(routines, routineName, logger);
-  if (!routine) {
-    return res.status(404).json({ ok: false, error: `Routine not found: ${routineName}`, correlationId: decision_id ?? correlationId });
-  }
-
-  if (shouldSkip(device, routineKey, lastApplied)) {
-    logger.info({ device, routineKey }, "Skipping duplicate actuation (cooldown)");
+  if (shouldSkip(deviceId, routineKey, lastApplied)) {
+    logger.info({ device: deviceId, routineKey }, "Skipping duplicate actuation (cooldown)");
     return res.json({
       ok: true,
       skipped: true,
@@ -186,10 +247,11 @@ app.post("/alexa", requireToken(ALEXA_TOKEN), requireReady(), async (req, res) =
   try {
     if (!executeRoutine) throw new Error("Alexa client not ready");
     await executeRoutine(ROUTINE_DEVICE, routine);
-    lastApplied.set(device, { key: routineKey, ts: Date.now() });
-    logger.info({ device, routineKey, routine: describeRoutine(routine) }, "Executed Alexa routine");
+    lastApplied.set(deviceId, { key: routineKey, ts: Date.now() });
+    logger.info({ device: deviceId, routineKey, routine: describeRoutine(routine) }, "Executed Alexa routine");
     return res.json({
       ok: true,
+      routineKey,
       correlationId: decision_id ?? correlationId,
       routineInvoked: describeRoutine(routine)
     });
@@ -208,26 +270,33 @@ app.post(
   requireToken(MEROSS_TOKEN),
   requireReady(),
   async (req, res) => {
-    const { plug, state, decision_id, correlationId } = req.body ?? {};
-    if (!plug || !state) {
+    const { plug: plugRaw, device: deviceRaw, state, decision_id, correlationId } = req.body ?? {};
+    const plug = (plugRaw ?? deviceRaw)?.toString();
+    const plugId = plug?.toUpperCase();
+    if (!plugId || state === undefined) {
       return res.status(400).json({ ok: false, error: "plug and state are required" });
     }
 
-    const routineKey = buildPlugRoutineKey(plug, state);
-    const routineName = routineMap[routineKey];
-    if (!routineName) {
+    const { routineKey, routineTarget, candidateKeys, normalizedState } = pickRoutineMapping(plugId, state);
+    if (!routineKey || !routineTarget) {
+      return res.status(404).json({
+        ok: false,
+        error: `No routine mapping for keys ${candidateKeys.join(",")}`,
+        candidateKeys,
+        normalizedState,
+        correlationId: decision_id ?? correlationId
+      });
+    }
+
+    const routine = resolveRoutine(routines, routineTarget, logger);
+    if (!routine) {
       return res
         .status(404)
-        .json({ ok: false, error: `No routine mapping for key ${routineKey}`, correlationId: decision_id ?? correlationId });
+        .json({ ok: false, error: `Routine not found: ${routineTarget}`, correlationId: decision_id ?? correlationId });
     }
 
-    const routine = resolveRoutine(routines, routineName, logger);
-    if (!routine) {
-      return res.status(404).json({ ok: false, error: `Routine not found: ${routineName}`, correlationId: decision_id ?? correlationId });
-    }
-
-    if (shouldSkip(plug, routineKey, lastApplied)) {
-      logger.info({ plug, routineKey }, "Skipping duplicate plug actuation (cooldown)");
+    if (shouldSkip(plugId, routineKey, lastApplied)) {
+      logger.info({ plug: plugId, routineKey }, "Skipping duplicate plug actuation (cooldown)");
       return res.json({
         ok: true,
         skipped: true,
@@ -239,10 +308,11 @@ app.post(
     try {
       if (!executeRoutine) throw new Error("Alexa client not ready");
       await executeRoutine(ROUTINE_DEVICE, routine);
-      lastApplied.set(plug, { key: routineKey, ts: Date.now() });
-      logger.info({ plug, routineKey, routine: describeRoutine(routine) }, "Executed Meross routine via Alexa");
+      lastApplied.set(plugId, { key: routineKey, ts: Date.now() });
+      logger.info({ plug: plugId, routineKey, routine: describeRoutine(routine) }, "Executed Meross routine via Alexa");
       return res.json({
         ok: true,
+        routineKey,
         correlationId: decision_id ?? correlationId,
         routineInvoked: describeRoutine(routine)
       });
@@ -277,6 +347,7 @@ async function initialize() {
     alexaReady = true;
 
     routineMap = await loadRoutineMap(MAP_PATH, logger, mapHint);
+    validateRoutineMap(routineMap, routines);
     routineMapReady = true;
     lastInitError = null;
     logger.info(

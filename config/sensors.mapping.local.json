@@ -3,6 +3,8 @@
     { "id": "living_center", "tempKey": "temp1f", "humidityKey": "humidity1" },
     { "id": "kitchen_main", "tempKey": "temp2f", "humidityKey": "humidity2" },
     { "id": "bathroom_main", "tempKey": "temp3f", "humidityKey": "humidity3" },
-    { "id": "living_radiator", "tempKey": "temp4f", "humidityKey": "humidity4" }
+    { "id": "living_radiator", "tempKey": "temp4f", "humidityKey": "humidity4" },
+    { "id": "bedroom_main", "tempKey": "temp5f", "humidityKey": "humidity5" },
+    { "id": "back_hall_main", "tempKey": "temp8f", "humidityKey": "humidity8" }
   ]
 }
