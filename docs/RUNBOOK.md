@@ -29,6 +29,15 @@ Environment used for verification:
 - Alexa auth + routines calls now share the same cookie/CSRF headers and default to a 120s init timeout. For regional hosts set `ALEXA_SERVICE_HOST` (e.g., `pitangui.amazon.com`) and use `ALEXA_HTTP_TRACE=1` to capture status/content-type/body previews for each call. Responses are written to `./debug/` when parsing fails.
 - For deployment, Procfile includes both the main web process and an `actuator` process that runs the compiled bridge (`npm run start:actuator-bridge`).
 
+### Alexa device setup
+Use this flow to choose a valid routine execution device (required for `/alexa` actuation):
+1. Generate or refresh the cookie (`npm run alexa:cookie:init` or `npm run alexa:cookie:refresh`).
+2. List available devices: `npm run alexa:list-devices` (look for `accountName` + `serialNumber`).
+3. Set `ALEXA_ROUTINE_DEVICE_NAME` (or `ALEXA_ROUTINE_DEVICE_SERIAL`) to an exact value from that list.
+4. Restart the bridge.
+5. Verify readiness: `curl -sS http://127.0.0.1:8787/readyz | jq .`.
+6. Actuate via `/alexa` as usual and confirm the routine executes.
+
 ## Example smoke test
 After starting the actuator bridge:
 ```bash

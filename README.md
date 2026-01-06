@@ -167,7 +167,7 @@ When `DRY_RUN=true`, the service logs the actions but does not call webhooks.
 The repo includes a minimal service (`npm run actuator-bridge`) that receives webhook payloads and triggers Alexa routines (preferred for both Transom AE fans and Meross plugs):
 
 * configure routine mappings in `ROUTINE_MAP_PATH` (or `ALEXA_ROUTINE_MAP_PATH`); defaults to `./config/alexa.routines.json` with an example at `config/alexa.routines.example.json` (keys like `KITCHEN_TRANSOM|ON|EXHAUST|LOW` → `"Example Kitchen Transom - EXHAUST - LOW"`)
-* supply an Alexa cookie via `ALEXA_COOKIE` or `ALEXA_COOKIE_JSON`, and set `ALEXA_ROUTINE_DEVICE_NAME` to the Echo device that should run routines
+* supply an Alexa cookie via `ALEXA_COOKIE` or `ALEXA_COOKIE_JSON`, and set `ALEXA_ROUTINE_DEVICE_NAME` (or `ALEXA_ROUTINE_DEVICE_SERIAL`) to the Echo device that should run routines; discover candidates via `npm run alexa:list-devices`
 * point `ALEXA_WEBHOOK_URL` / `MEROSS_WEBHOOK_URL` to the bridge (defaults: `http://localhost:8787/alexa` and `/meross`) and reuse the existing bearer tokens
 * list available routines with `npm run alexa:list-routines`
 * health/readiness: `GET /healthz` is always 200 once the process is up; `GET /readyz` returns 200 only after Alexa init + routine map load (otherwise 503 with details)

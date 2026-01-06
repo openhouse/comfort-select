@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import AlexaRemote from "alexa-remote2";
+import { promisify } from "node:util";
 import type { Logger } from "pino";
 import {
   type AlexaCookieData,
@@ -387,6 +388,27 @@ export function buildPlugRoutineKey(plugId: string, state: RoutineState): string
 
 export function describeRoutine(routine: any): { id?: string; name?: string } {
   return { id: routineId(routine), name: routine?.name ?? routine?.automationName };
+}
+
+function coalesceDevices(candidate: unknown): any[] {
+  if (Array.isArray(candidate)) return candidate;
+  if (Array.isArray((candidate as any)?.devices)) return (candidate as any).devices;
+  return [];
+}
+
+export async function fetchAlexaDevices(alexa: any, logger: Logger): Promise<any[]> {
+  const getDevices = typeof alexa?.getDevices === "function" ? promisify(alexa.getDevices).bind(alexa) : null;
+  if (!getDevices) {
+    logger.warn("Alexa client missing getDevices; returning empty device list");
+    return [];
+  }
+  const result = await getDevices();
+  const devices = coalesceDevices(result).length > 0 ? coalesceDevices(result) : coalesceDevices(alexa);
+  if (!Array.isArray(devices) || devices.length === 0) {
+    logger.warn("Alexa getDevices returned no devices");
+    return [];
+  }
+  return devices;
 }
 
 function trimEmptySegments(key: string): string {
