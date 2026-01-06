@@ -8,9 +8,11 @@ import {
   RoutineState,
   buildRoutineCandidateKeys,
   describeRoutine,
+  fetchAlexaDevices,
   initAlexaRemote,
   loadRoutineMap,
   normalizeRoutineState,
+  routineId,
   resolveRoutine
 } from "./lib.js";
 
@@ -54,7 +56,9 @@ const logger = pino(
 
 const ALEXA_TOKEN = process.env.ALEXA_WEBHOOK_TOKEN;
 const MEROSS_TOKEN = process.env.MEROSS_WEBHOOK_TOKEN;
-const ROUTINE_DEVICE = process.env.ALEXA_ROUTINE_DEVICE_NAME ?? "ALEXA_CURRENT_DEVICE";
+const ROUTINE_DEVICE_NAME =
+  process.env.ALEXA_ROUTINE_DEVICE_NAME ?? process.env.ALEXA_ROUTINE_DEVICE ?? "ALEXA_CURRENT_DEVICE";
+const ROUTINE_DEVICE_SERIAL = process.env.ALEXA_ROUTINE_DEVICE_SERIAL;
 const ROUTINE_MAP_ENV_VARS = ["ROUTINE_MAP_PATH", "ALEXA_ROUTINE_MAP_PATH"] as const;
 const DEFAULT_ROUTINE_MAP_PATH = path.join(process.cwd(), "config", "alexa.routines.json");
 const MAP_PATH = resolveFromRepo(
@@ -92,13 +96,14 @@ function shouldSkip(deviceId: string, routineKey: string, cache: Map<string, { k
 
 function requireReady() {
   return (_req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const { ready, alexaReady: alexaUp, routineMapReady: mapReady } = readyState();
+    const { ready, alexaReady: alexaUp, routineMapReady: mapReady, routineDeviceReady: deviceReady } = readyState();
     if (!ready) {
       return res.status(503).json({
         ok: false,
         ready,
         alexaReady: alexaUp,
         routineMapReady: mapReady,
+        routineDeviceReady: deviceReady,
         error: lastInitError ?? "actuator_bridge_not_ready"
       });
     }
@@ -111,12 +116,18 @@ app.use(express.json({ limit: "256kb" }));
 
 let alexaReady = false;
 let routineMapReady = false;
+let routineDeviceReady = false;
 let lastInitError: string | null = null;
 let alexa: any | null = null;
 let routines: any[] = [];
 let routineMap: RoutineMap = {};
-let executeRoutine: ((serialOrName: string, routine: any) => Promise<void>) | null = null;
+let executeRoutine: ((serialOrName: string, routineId: string) => Promise<void>) | null = null;
 let initializing = false;
+let alexaDevices: any[] = [];
+let routineDeviceResolved: any | null = null;
+let routineDeviceFound = false;
+let routineDeviceSamples: Array<{ accountName?: string; serialNumber?: string }> = [];
+let routineDeviceTarget: string | null = null;
 let routineValidation: { missing: Array<{ key: string; target: string }>; resolved: number; total: number } = {
   missing: [],
   resolved: 0,
@@ -126,8 +137,21 @@ let routineValidation: { missing: Array<{ key: string; target: string }>; resolv
 const lastApplied = new Map<string, { key: string; ts: number }>();
 
 function readyState() {
-  const ready = alexaReady && routineMapReady;
-  return { ready, alexaReady, routineMapReady, lastInitError };
+  const ready = alexaReady && routineMapReady && routineDeviceReady;
+  return { ready, alexaReady, routineMapReady, routineDeviceReady, lastInitError };
+}
+
+function normalizeIdentifier(value: string | undefined | null): string | undefined {
+  return value?.trim().toLowerCase();
+}
+
+function summarizeDevice(device: any) {
+  if (!device) return null;
+  return {
+    accountName: device.accountName ?? device.name,
+    serialNumber: device.serialNumber,
+    deviceType: device.deviceType ?? device.deviceFamily ?? device.type
+  };
 }
 
 function validateRoutineMap(map: RoutineMap, discoveredRoutines: any[]): void {
@@ -173,6 +197,30 @@ function pickRoutineMapping(deviceId: string, state: RoutineState): {
   return { candidateKeys, normalizedState };
 }
 
+function resolveRoutineDevice(devices: any[]): { device: any | null; found: boolean; target: string | null } {
+  const identifiers = [
+    ROUTINE_DEVICE_SERIAL,
+    ROUTINE_DEVICE_NAME,
+    ROUTINE_DEVICE_NAME === "ALEXA_CURRENT_DEVICE" ? undefined : "ALEXA_CURRENT_DEVICE"
+  ].filter(Boolean) as string[];
+
+  const normalized = identifiers.map(normalizeIdentifier);
+  const match =
+    devices.find((d) => {
+      const name = normalizeIdentifier(d.accountName ?? d.name);
+      const serial = normalizeIdentifier(d.serialNumber);
+      return normalized.includes(name) || normalized.includes(serial);
+    }) ?? null;
+
+  const targetDevice = match ?? (devices.length > 0 ? devices[0] : null);
+  const found = Boolean(match);
+  const target = targetDevice
+    ? targetDevice.serialNumber ?? targetDevice.accountName ?? targetDevice.name ?? ROUTINE_DEVICE_NAME
+    : null;
+
+  return { device: targetDevice, found, target };
+}
+
 app.get("/healthz", (_req, res) => {
   const { ready } = readyState();
   res.json({
@@ -180,8 +228,15 @@ app.get("/healthz", (_req, res) => {
     ready,
     alexaReady,
     routineMapReady,
+    routineDeviceReady,
     lastInitError,
     routines: routines.length,
+    devices: alexaDevices.length,
+    routineDeviceConfiguredName: ROUTINE_DEVICE_NAME,
+    routineDeviceConfiguredSerial: ROUTINE_DEVICE_SERIAL,
+    routineDeviceFound,
+    routineDeviceResolved: summarizeDevice(routineDeviceResolved),
+    routineDeviceSamples,
     mapped: Object.keys(routineMap).length,
     mapped_resolved: routineValidation.resolved,
     mapped_missing: routineValidation.missing.length,
@@ -197,14 +252,38 @@ app.get("/readyz", (_req, res) => {
     ready,
     alexaReady,
     routineMapReady,
+    routineDeviceReady,
     lastInitError,
     routines: routines.length,
+    devices: alexaDevices.length,
+    routineDeviceConfiguredName: ROUTINE_DEVICE_NAME,
+    routineDeviceConfiguredSerial: ROUTINE_DEVICE_SERIAL,
+    routineDeviceFound,
+    routineDeviceResolved: summarizeDevice(routineDeviceResolved),
+    routineDeviceSamples,
     mapped: Object.keys(routineMap).length,
     mapped_resolved: routineValidation.resolved,
     mapped_missing: routineValidation.missing.length
   };
   if (!ready) return res.status(503).json(body);
   return res.json(body);
+});
+
+app.get("/alexa/devices", requireToken(ALEXA_TOKEN), (_req, res) => {
+  const { ready } = readyState();
+  return res.json({
+    ok: true,
+    ready,
+    devicesCount: alexaDevices.length,
+    devices: alexaDevices.map(summarizeDevice),
+    routineDeviceConfiguredName: ROUTINE_DEVICE_NAME,
+    routineDeviceConfiguredSerial: ROUTINE_DEVICE_SERIAL,
+    routineDeviceFound,
+    routineDeviceResolved: summarizeDevice(routineDeviceResolved),
+    routineDeviceTarget,
+    routineDeviceReady,
+    routineDeviceSamples
+  });
 });
 
 app.post("/alexa", requireToken(ALEXA_TOKEN), requireReady(), async (req, res) => {
@@ -246,9 +325,23 @@ app.post("/alexa", requireToken(ALEXA_TOKEN), requireReady(), async (req, res) =
 
   try {
     if (!executeRoutine) throw new Error("Alexa client not ready");
-    await executeRoutine(ROUTINE_DEVICE, routine);
+    const routineIdentifier = routineId(routine);
+    if (!routineIdentifier) {
+      return res
+        .status(500)
+        .json({ ok: false, error: "resolved_routine_missing_id", correlationId: decision_id ?? correlationId });
+    }
+    await executeRoutine(routineDeviceTarget ?? ROUTINE_DEVICE_NAME, routineIdentifier);
     lastApplied.set(deviceId, { key: routineKey, ts: Date.now() });
-    logger.info({ device: deviceId, routineKey, routine: describeRoutine(routine) }, "Executed Alexa routine");
+    logger.info(
+      {
+        device: deviceId,
+        routineKey,
+        routine: describeRoutine(routine),
+        routineDevice: routineDeviceTarget ?? ROUTINE_DEVICE_NAME
+      },
+      "Executed Alexa routine"
+    );
     return res.json({
       ok: true,
       routineKey,
@@ -307,9 +400,23 @@ app.post(
 
     try {
       if (!executeRoutine) throw new Error("Alexa client not ready");
-      await executeRoutine(ROUTINE_DEVICE, routine);
+      const routineIdentifier = routineId(routine);
+      if (!routineIdentifier) {
+        return res
+          .status(500)
+          .json({ ok: false, error: "resolved_routine_missing_id", correlationId: decision_id ?? correlationId });
+      }
+      await executeRoutine(routineDeviceTarget ?? ROUTINE_DEVICE_NAME, routineIdentifier);
       lastApplied.set(plugId, { key: routineKey, ts: Date.now() });
-      logger.info({ plug: plugId, routineKey, routine: describeRoutine(routine) }, "Executed Meross routine via Alexa");
+      logger.info(
+        {
+          plug: plugId,
+          routineKey,
+          routine: describeRoutine(routine),
+          routineDevice: routineDeviceTarget ?? ROUTINE_DEVICE_NAME
+        },
+        "Executed Meross routine via Alexa"
+      );
       return res.json({
         ok: true,
         routineKey,
@@ -328,7 +435,10 @@ app.post(
 );
 
 app.listen(PORT, () => {
-  logger.info({ port: PORT, routineDevice: ROUTINE_DEVICE, mapPath: MAP_PATH }, "Actuator bridge listening");
+  logger.info(
+    { port: PORT, routineDevice: ROUTINE_DEVICE_NAME, routineDeviceSerial: ROUTINE_DEVICE_SERIAL, mapPath: MAP_PATH },
+    "Actuator bridge listening"
+  );
 });
 
 async function initialize() {
@@ -342,8 +452,35 @@ async function initialize() {
     routines = alexaInit.routines ?? [];
     executeRoutine = promisify(alexa.executeAutomationRoutine).bind(alexa) as (
       serialOrName: string,
-      routine: any
+      routineId: string
     ) => Promise<void>;
+
+    alexaDevices = await fetchAlexaDevices(alexa, logger);
+    routineDeviceSamples = alexaDevices.slice(0, 5).map((d) => ({
+      accountName: d.accountName ?? d.name,
+      serialNumber: d.serialNumber
+    }));
+
+    if (alexaDevices.length === 0) {
+      throw new Error("routine_device_not_found: no devices returned by getDevices()");
+    }
+
+    const routineDeviceSelection = resolveRoutineDevice(alexaDevices);
+    routineDeviceResolved = routineDeviceSelection.device;
+    routineDeviceFound = routineDeviceSelection.found;
+    routineDeviceTarget = routineDeviceSelection.target;
+    routineDeviceReady = Boolean(routineDeviceResolved && routineDeviceTarget);
+    if (!routineDeviceFound) {
+      logger.warn(
+        {
+          routineDeviceConfiguredName: ROUTINE_DEVICE_NAME,
+          routineDeviceConfiguredSerial: ROUTINE_DEVICE_SERIAL,
+          routineDeviceTarget,
+          routineDeviceSamples
+        },
+        "Configured routine device not found; using fallback"
+      );
+    }
     alexaReady = true;
 
     routineMap = await loadRoutineMap(MAP_PATH, logger, mapHint);
@@ -351,12 +488,25 @@ async function initialize() {
     routineMapReady = true;
     lastInitError = null;
     logger.info(
-      { routines: routines.length, mapped: Object.keys(routineMap).length, routineDevice: ROUTINE_DEVICE },
+      {
+        routines: routines.length,
+        mapped: Object.keys(routineMap).length,
+        routineDeviceConfiguredName: ROUTINE_DEVICE_NAME,
+        routineDeviceConfiguredSerial: ROUTINE_DEVICE_SERIAL,
+        routineDeviceTarget,
+        routineDeviceFound
+      },
       "Actuator bridge ready"
     );
   } catch (err: any) {
     alexaReady = false;
     routineMapReady = false;
+    routineDeviceReady = false;
+    alexaDevices = [];
+    routineDeviceSamples = [];
+    routineDeviceResolved = null;
+    routineDeviceFound = false;
+    routineDeviceTarget = null;
     lastInitError = err?.message ?? String(err);
     logger.error({ err, mapPath: MAP_PATH }, "Actuator bridge initialization failed");
     initializing = false;

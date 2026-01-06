@@ -18,6 +18,7 @@
     "dev:actuator-bridge": "tsx services/actuator-bridge/index.ts",
     "start:actuator-bridge": "node dist/services/actuator-bridge/index.js",
     "dev:all": "concurrently -k \"npm run dev\" \"npm run dev:actuator-bridge\"",
+    "alexa:list-devices": "tsx scripts/alexa/list-devices.ts",
     "alexa:list-routines": "tsx scripts/alexa/list-routines.ts",
     "alexa:cookie:init": "tsx scripts/alexa/cookie-init.ts",
     "alexa:cookie:refresh": "tsx scripts/alexa/cookie-refresh.ts",
