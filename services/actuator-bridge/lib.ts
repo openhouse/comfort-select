@@ -22,6 +22,11 @@ export type RoutineState = {
   direction?: string;
   speed?: string;
 };
+export type LoadedRoutine = {
+  id?: string;
+  name?: string;
+  raw: any;
+};
 
 const DEFAULT_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
@@ -113,13 +118,32 @@ async function tracedFetch(
 
 async function loadCookie(logger: Logger): Promise<{ cookie: AlexaCookieData; cookieString: string; csrf?: string; macDms?: string }> {
   const macDmsEnv = process.env.ALEXA_MACDMS?.trim();
+
+  const coerceMacDms = (raw: unknown): string | undefined => {
+    if (typeof raw === "string" && raw.trim().length > 0) return raw.trim();
+    if (raw && typeof raw === "object") {
+      const candidate = (raw as any).macDms ?? (raw as any).macdms ?? (raw as any).device_private_key;
+      if (typeof candidate === "string" && candidate.trim().length > 0) return candidate.trim();
+    }
+    return undefined;
+  };
+
+  const coerceCsrf = (raw: unknown): string | undefined => {
+    if (typeof raw === "string" && raw.trim().length > 0) return raw.trim();
+    return undefined;
+  };
   if (process.env.ALEXA_COOKIE && process.env.ALEXA_COOKIE.trim().length > 0) {
     const cookieString = process.env.ALEXA_COOKIE.trim();
+    const csrf = coerceCsrf(process.env.ALEXA_CSRF);
+    const macDms = coerceMacDms(macDmsEnv);
     logger.info(
-      { cookie_source: "env", cookie_summary: summarizeSecret(cookieString), macDms: summarizeSecret(macDmsEnv) },
+      { cookie_source: "env", cookie_summary: summarizeSecret(cookieString), macDms: summarizeSecret(macDms) },
       "Loaded Alexa cookie from environment variable"
     );
-    return { cookie: cookieString, cookieString, csrf: process.env.ALEXA_CSRF ?? undefined, macDms: macDmsEnv };
+    if (!macDms) {
+      throw new Error("ALEXA_MACDMS must be a non-empty string when providing cookie via ALEXA_COOKIE env var");
+    }
+    return { cookie: cookieString, cookieString, csrf, macDms };
   }
 
   const cookieJsonPath = getCookiePath();
@@ -134,8 +158,8 @@ async function loadCookie(logger: Logger): Promise<{ cookie: AlexaCookieData; co
     if (!cookieString) {
       throw new Error(`Cookie JSON missing 'cookie', 'localCookie', or 'loginCookie' property (${cookieJsonPath})`);
     }
-    const csrf = extractCsrf(data);
-    const macDms = typeof data === "object" && data !== null ? (data as any).macDms ?? macDmsEnv : macDmsEnv;
+    const csrf = coerceCsrf(extractCsrf(data));
+    const macDms = coerceMacDms(typeof data === "object" && data !== null ? (data as any).macDms ?? macDmsEnv : macDmsEnv);
     const cookiePayload =
       typeof data === "object" && data !== null
         ? { ...data, macDms, localCookie: (data as any).localCookie ?? cookieString }
@@ -151,6 +175,12 @@ async function loadCookie(logger: Logger): Promise<{ cookie: AlexaCookieData; co
       },
       "Loaded Alexa cookie data from disk"
     );
+
+    if (!macDms) {
+      throw new Error(
+        `Alexa cookie registration data missing macDms; regenerate via 'npm run alexa:cookie:init' (${cookieJsonPath})`
+      );
+    }
 
     if (typeof cookiePayload === "object" && !cookiePayload.macDms) {
       throw new Error(
@@ -200,7 +230,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
-export async function initAlexaRemote(logger: Logger): Promise<{ alexa: any; routines: any[] }> {
+export async function initAlexaRemote(logger: Logger): Promise<{ alexa: any; routines: LoadedRoutine[] }> {
   const alexa = new AlexaRemote();
   const { cookie, cookieString, csrf, macDms } = await loadCookie(logger);
   const amazonPage = process.env.ALEXA_AMAZON_DOMAIN ?? "amazon.com";
@@ -336,22 +366,30 @@ export async function initAlexaRemote(logger: Logger): Promise<{ alexa: any; rou
 
   logger.info({ routines: routines.length }, "Loaded Alexa routines");
 
-  return { alexa, routines };
+  const loadedRoutines: LoadedRoutine[] = routines.map((raw: any) => ({
+    id: routineId(raw),
+    name: raw?.name ?? raw?.automationName,
+    raw
+  }));
+
+  return { alexa, routines: loadedRoutines };
 }
 
-export function routineId(routine: any): string | undefined {
-  return routine?.automationId ?? routine?.behaviorId ?? routine?.routineId ?? routine?.id;
+export function routineId(routine: LoadedRoutine | any): string | undefined {
+  const candidate = (routine as LoadedRoutine)?.raw ?? routine;
+  return candidate?.automationId ?? candidate?.behaviorId ?? candidate?.routineId ?? candidate?.id ?? routine?.id;
 }
 
 export function resolveRoutine(
-  routines: any[],
+  routines: LoadedRoutine[],
   target: string,
   logger: Logger,
   opts?: { quiet?: boolean }
-): any | null {
+): LoadedRoutine | null {
   const found =
-    routines.find((r) => r.name === target || r.automationName === target || routineId(r) === target) ??
-    routines.find((r) => routineId(r)?.includes(target));
+    routines.find(
+      (r) => r.name === target || (r.raw?.automationName ?? r.raw?.name) === target || routineId(r) === target
+    ) ?? routines.find((r) => routineId(r)?.includes(target));
   if (!found && !opts?.quiet) {
     logger.warn({ target }, "Routine not found");
   }
@@ -386,8 +424,12 @@ export function buildPlugRoutineKey(plugId: string, state: RoutineState): string
   return `${plugId}|${state.power ?? ""}`.toUpperCase();
 }
 
-export function describeRoutine(routine: any): { id?: string; name?: string } {
-  return { id: routineId(routine), name: routine?.name ?? routine?.automationName };
+export function describeRoutine(routine: LoadedRoutine | any): { id?: string; name?: string } {
+  const raw = (routine as LoadedRoutine)?.raw ?? routine;
+  return {
+    id: (routine as LoadedRoutine)?.id ?? routineId(raw),
+    name: (routine as LoadedRoutine)?.name ?? raw?.name ?? raw?.automationName
+  };
 }
 
 function coalesceDevices(candidate: unknown): any[] {

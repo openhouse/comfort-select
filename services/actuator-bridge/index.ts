@@ -1,9 +1,9 @@
 import express from "express";
 import path from "node:path";
-import { promisify } from "node:util";
 import pino from "pino";
 import { resolveFromRepo } from "./env.js";
 import {
+  type LoadedRoutine,
   RoutineMap,
   RoutineState,
   buildRoutineCandidateKeys,
@@ -12,7 +12,6 @@ import {
   initAlexaRemote,
   loadRoutineMap,
   normalizeRoutineState,
-  routineId,
   resolveRoutine
 } from "./lib.js";
 
@@ -119,9 +118,9 @@ let routineMapReady = false;
 let routineDeviceReady = false;
 let lastInitError: string | null = null;
 let alexa: any | null = null;
-let routines: any[] = [];
+let routines: LoadedRoutine[] = [];
 let routineMap: RoutineMap = {};
-let executeRoutine: ((serialOrName: string, routineId: string) => Promise<void>) | null = null;
+let executeRoutine: ((serialOrName: string, routine: any) => Promise<any>) | null = null;
 let initializing = false;
 let alexaDevices: any[] = [];
 let routineDeviceResolved: any | null = null;
@@ -325,28 +324,34 @@ app.post("/alexa", requireToken(ALEXA_TOKEN), requireReady(), async (req, res) =
 
   try {
     if (!executeRoutine) throw new Error("Alexa client not ready");
-    const routineIdentifier = routineId(routine);
-    if (!routineIdentifier) {
-      return res
-        .status(500)
-        .json({ ok: false, error: "resolved_routine_missing_id", correlationId: decision_id ?? correlationId });
+    const routinePayload = (routine as any).raw ?? routine;
+    if (!routinePayload || typeof routinePayload !== "object") {
+      return res.status(500).json({
+        ok: false,
+        error: "resolved_routine_missing_definition",
+        correlationId: decision_id ?? correlationId
+      });
     }
-    await executeRoutine(routineDeviceTarget ?? ROUTINE_DEVICE_NAME, routineIdentifier);
+    const executionResult = await executeRoutine(routineDeviceTarget ?? ROUTINE_DEVICE_NAME, routinePayload);
+    const executed = executionResult === undefined || executionResult === null ? "unknown" : "acknowledged";
     lastApplied.set(deviceId, { key: routineKey, ts: Date.now() });
     logger.info(
       {
         device: deviceId,
         routineKey,
         routine: describeRoutine(routine),
-        routineDevice: routineDeviceTarget ?? ROUTINE_DEVICE_NAME
+        routineDevice: routineDeviceTarget ?? ROUTINE_DEVICE_NAME,
+        executionResult
       },
-      "Executed Alexa routine"
+      executed === "acknowledged" ? "Executed Alexa routine" : "Requested Alexa routine execution"
     );
     return res.json({
       ok: true,
       routineKey,
       correlationId: decision_id ?? correlationId,
-      routineInvoked: describeRoutine(routine)
+      routineInvoked: describeRoutine(routine),
+      executed,
+      executionResult
     });
   } catch (err: any) {
     logger.error({ err, device, routineKey }, "Routine execution failed");
@@ -400,28 +405,32 @@ app.post(
 
     try {
       if (!executeRoutine) throw new Error("Alexa client not ready");
-      const routineIdentifier = routineId(routine);
-      if (!routineIdentifier) {
+      const routinePayload = (routine as any).raw ?? routine;
+      if (!routinePayload || typeof routinePayload !== "object") {
         return res
           .status(500)
-          .json({ ok: false, error: "resolved_routine_missing_id", correlationId: decision_id ?? correlationId });
+          .json({ ok: false, error: "resolved_routine_missing_definition", correlationId: decision_id ?? correlationId });
       }
-      await executeRoutine(routineDeviceTarget ?? ROUTINE_DEVICE_NAME, routineIdentifier);
+      const executionResult = await executeRoutine(routineDeviceTarget ?? ROUTINE_DEVICE_NAME, routinePayload);
+      const executed = executionResult === undefined || executionResult === null ? "unknown" : "acknowledged";
       lastApplied.set(plugId, { key: routineKey, ts: Date.now() });
       logger.info(
         {
           plug: plugId,
           routineKey,
           routine: describeRoutine(routine),
-          routineDevice: routineDeviceTarget ?? ROUTINE_DEVICE_NAME
+          routineDevice: routineDeviceTarget ?? ROUTINE_DEVICE_NAME,
+          executionResult
         },
-        "Executed Meross routine via Alexa"
+        executed === "acknowledged" ? "Executed Meross routine via Alexa" : "Requested Meross routine execution via Alexa"
       );
       return res.json({
         ok: true,
         routineKey,
         correlationId: decision_id ?? correlationId,
-        routineInvoked: describeRoutine(routine)
+        routineInvoked: describeRoutine(routine),
+        executed,
+        executionResult
       });
     } catch (err: any) {
       logger.error({ err, plug, routineKey }, "Routine execution failed");
@@ -450,10 +459,13 @@ async function initialize() {
     const alexaInit = await initAlexaRemote(logger);
     alexa = alexaInit.alexa;
     routines = alexaInit.routines ?? [];
-    executeRoutine = promisify(alexa.executeAutomationRoutine).bind(alexa) as (
-      serialOrName: string,
-      routineId: string
-    ) => Promise<void>;
+    executeRoutine = (serialOrName: string, routine: any) =>
+      new Promise((resolve, reject) => {
+        alexa.executeAutomationRoutine(serialOrName, routine, (err: any, res: any) => {
+          if (err) return reject(err);
+          resolve(res);
+        });
+      });
 
     alexaDevices = await fetchAlexaDevices(alexa, logger);
     routineDeviceSamples = alexaDevices.slice(0, 5).map((d) => ({
