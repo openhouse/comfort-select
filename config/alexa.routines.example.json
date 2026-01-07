@@ -1,0 +1,28 @@
+{
+  "mappings": {
+    "KITCHEN_TRANSOM|OFF": "Example Kitchen Transom - OFF",
+    "KITCHEN_TRANSOM|ON|EXHAUST|LOW": "Example Kitchen Transom - EXHAUST - LOW",
+    "KITCHEN_TRANSOM|ON|EXHAUST|MED": "Example Kitchen Transom - EXHAUST - MED",
+    "KITCHEN_TRANSOM|ON|EXHAUST|HIGH": "Example Kitchen Transom - EXHAUST - HIGH",
+    "KITCHEN_TRANSOM|ON|EXHAUST|TURBO": "Example Kitchen Transom - EXHAUST - TURBO",
+    "KITCHEN_TRANSOM|ON|DIRECT|LOW": "Example Kitchen Transom - DIRECT - LOW",
+    "KITCHEN_TRANSOM|ON|DIRECT|MED": "Example Kitchen Transom - DIRECT - MED",
+    "KITCHEN_TRANSOM|ON|DIRECT|HIGH": "Example Kitchen Transom - DIRECT - HIGH",
+    "KITCHEN_TRANSOM|ON|DIRECT|TURBO": "Example Kitchen Transom - DIRECT - TURBO",
+
+    "BATHROOM_TRANSOM|OFF": "Example Bathroom Transom - OFF",
+    "BATHROOM_TRANSOM|ON|EXHAUST|LOW": "Example Bathroom Transom - EXHAUST - LOW",
+    "BATHROOM_TRANSOM|ON|EXHAUST|MED": "Example Bathroom Transom - EXHAUST - MED",
+    "BATHROOM_TRANSOM|ON|EXHAUST|HIGH": "Example Bathroom Transom - EXHAUST - HIGH",
+    "BATHROOM_TRANSOM|ON|EXHAUST|TURBO": "Example Bathroom Transom - EXHAUST - TURBO",
+    "BATHROOM_TRANSOM|ON|DIRECT|LOW": "Example Bathroom Transom - DIRECT - LOW",
+    "BATHROOM_TRANSOM|ON|DIRECT|MED": "Example Bathroom Transom - DIRECT - MED",
+    "BATHROOM_TRANSOM|ON|DIRECT|HIGH": "Example Bathroom Transom - DIRECT - HIGH",
+    "BATHROOM_TRANSOM|ON|DIRECT|TURBO": "Example Bathroom Transom - DIRECT - TURBO",
+
+    "LIVING_VORNADO_630|ON": "amzn1.alexa.automation.example-living-630-on-id",
+    "LIVING_VORNADO_630|OFF": "amzn1.alexa.automation.example-living-630-off-id",
+    "KITCHEN_VORNADO_630|ON": "amzn1.alexa.automation.example-kitchen-630-on-id",
+    "KITCHEN_VORNADO_630|OFF": "amzn1.alexa.automation.example-kitchen-630-off-id"
+  }
+}

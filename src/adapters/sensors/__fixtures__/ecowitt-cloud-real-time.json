@@ -1,0 +1,16 @@
+{
+  "data": {
+    "temp_and_humidity_ch1": {
+      "temperature": { "value": "72.9" },
+      "humidity": { "value": "30" }
+    },
+    "temp_and_humidity_ch2": {
+      "temperature": { "value": 68.2 },
+      "humidity": { "value": "41" }
+    },
+    "indoor": {
+      "temperature": { "value": "70.1" },
+      "humidity": { "value": "33" }
+    }
+  }
+}

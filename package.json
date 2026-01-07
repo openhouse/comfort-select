@@ -1,19 +1,50 @@
 {
-  "name": "comfort-steward",
-  "version": "1.0.0",
-  "main": "index.js",
+  "name": "comfort-select",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Comfort-select control loop (weather + sensors + LLM + Alexa/Meross + Google Sheets)",
+  "type": "module",
+  "main": "dist/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "run-once": "tsx scripts/run-once.ts",
+    "init-sheet": "tsx scripts/init-sheet.ts",
+    "rebuild-sheet": "tsx scripts/rebuild-sheet.ts",
+    "print-prompt": "tsx scripts/print-prompt.ts",
+    "test": "tsx --test src/llm/schema.test.ts src/adapters/sensors/ecowittCloud.test.ts src/history/promptHistory.test.ts",
+    "actuator-bridge": "npm run dev:actuator-bridge",
+    "dev:actuator-bridge": "tsx services/actuator-bridge/index.ts",
+    "start:actuator-bridge": "node dist/services/actuator-bridge/index.js",
+    "dev:all": "concurrently -k \"npm run dev\" \"npm run dev:actuator-bridge\"",
+    "alexa:list-devices": "tsx scripts/alexa/list-devices.ts",
+    "alexa:list-routines": "tsx scripts/alexa/list-routines.ts",
+    "alexa:cookie:init": "tsx scripts/alexa/cookie-init.ts",
+    "alexa:cookie:refresh": "tsx scripts/alexa/cookie-refresh.ts",
+    "alexa:cookie": "npm run alexa:cookie:init"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/openhouse/comfort-steward.git"
+  "engines": {
+    "node": ">=20.0.0"
   },
-  "author": "Jamie Burkart",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/openhouse/comfort-steward/issues"
+  "dependencies": {
+    "alexa-cookie2": "^5.0.3",
+    "alexa-remote2": "^8.0.4",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "googleapis": "^140.0.0",
+    "handlebars": "^4.7.8",
+    "mongodb": "^7.0.0",
+    "openai": "^4.73.1",
+    "pino": "^9.3.2",
+    "pino-pretty": "^11.2.2",
+    "zod": "^3.23.8"
   },
-  "homepage": "https://github.com/openhouse/comfort-steward#readme",
-  "description": ""
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.1",
+    "concurrently": "^9.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
 }

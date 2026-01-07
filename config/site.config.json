@@ -1,0 +1,239 @@
+{
+  "site": {
+    "id": "example-site",
+    "label": "Example Residence, Example City",
+    "timezone": "America/New_York",
+    "address": "123 Main St, Example City, EX 00000",
+    "location": {
+      "lat": 40,
+      "lon": -73,
+      "elevation_ft": 150
+    },
+    "materials": [
+      "lathe_plaster_walls",
+      "brick_masonry_exterior",
+      "wood_joists_floors",
+      "tile_kitchen_bath"
+    ],
+    "notes": [
+      "Historic multi-unit building with shared steam radiators (not individually controllable).",
+      "Kitchen and bathroom each use a window-mounted transom fan for exhaust.",
+      "Example data only; replace with your own site details."
+    ]
+  },
+  "curators": ["Gail S. Brager", "Stefano Schiavon", "Deborah Treisman"],
+  "rooms": [
+    {
+      "id": "kitchen",
+      "name": "Kitchen",
+      "kind": "kitchen",
+      "dimensions_ft": { "length_ft": 12, "width_ft": 8, "height_ft": 9.17 },
+      "irregularities": [
+        {
+          "description": "front-left corner cutout",
+          "size_ft": { "length_ft": 2.08, "width_ft": 2.17 }
+        }
+      ],
+      "windows": { "count": 1, "notes": "exterior window with transom fan installed at top" },
+      "connected_room_ids": ["front_hall"],
+      "tags": ["tile_floor"]
+    },
+    {
+      "id": "front_hall",
+      "name": "Front hall / foyer",
+      "kind": "hall",
+      "dimensions_ft": { "length_ft": 8, "width_ft": 5, "height_ft": 9.25 },
+      "windows": { "count": 0 },
+      "connected_room_ids": ["kitchen", "living_room", "stair_landing"],
+      "notes": ["Connects to a shared indoor stair landing; potential airflow path."]
+    },
+    {
+      "id": "living_room",
+      "name": "Living room",
+      "kind": "living",
+      "dimensions_ft": { "length_ft": 14.42, "width_ft": 13.67, "height_ft": 9.25 },
+      "windows": { "count": 2, "notes": "steam radiator below two-window bay" },
+      "connected_room_ids": ["front_hall", "back_hall"]
+    },
+    {
+      "id": "back_hall",
+      "name": "Back hall",
+      "kind": "hall",
+      "dimensions_ft": { "length_ft": 6.42, "width_ft": 3.08, "height_ft": 9.25 },
+      "windows": { "count": 0 },
+      "connected_room_ids": [
+        "living_room",
+        "bathroom",
+        "bedroom",
+        "back_hall_closet_1",
+        "back_hall_closet_2"
+      ]
+    },
+    {
+      "id": "bathroom",
+      "name": "Bathroom",
+      "kind": "bathroom",
+      "dimensions_ft": { "length_ft": 8.08, "width_ft": 4.92, "height_ft": 9.17 },
+      "irregularities": [
+        { "description": "small bump-out", "size_ft": { "length_ft": 0.42, "width_ft": 1.5 } }
+      ],
+      "windows": { "count": 1, "notes": "exterior window with transom fan installed at top" },
+      "connected_room_ids": ["back_hall"]
+    },
+    {
+      "id": "bedroom",
+      "name": "Bedroom",
+      "kind": "bedroom",
+      "dimensions_ft": { "length_ft": 15.08, "width_ft": 10.58, "height_ft": 9.25 },
+      "windows": { "count": 2 },
+      "connected_room_ids": ["back_hall"],
+      "notes": ["Ceiling fan present but not yet integrated."]
+    },
+    {
+      "id": "back_hall_closet_1",
+      "name": "Back hall closet 1",
+      "kind": "closet",
+      "dimensions_ft": { "notes": "approx 5 ft² footprint; ~9.25 ft height" },
+      "connected_room_ids": ["back_hall"]
+    },
+    {
+      "id": "back_hall_closet_2",
+      "name": "Back hall closet 2",
+      "kind": "closet",
+      "dimensions_ft": { "notes": "approx 5.3 ft² footprint; ~9.25 ft height" },
+      "connected_room_ids": ["back_hall"]
+    },
+    {
+      "id": "stair_landing",
+      "name": "Building stair landing / hallway",
+      "kind": "external_hall",
+      "windows": { "count": 0 },
+      "connected_room_ids": ["front_hall"],
+      "exterior": true,
+      "notes": ["Represents outside-of-unit indoor common hall."]
+    }
+  ],
+  "connections": [
+    { "from": "front_hall", "to": "kitchen", "kind": "doorway" },
+    { "from": "front_hall", "to": "living_room", "kind": "doorway" },
+    { "from": "front_hall", "to": "stair_landing", "kind": "entry_door" },
+    { "from": "living_room", "to": "back_hall", "kind": "open_passage" },
+    { "from": "back_hall", "to": "bathroom", "kind": "doorway" },
+    { "from": "back_hall", "to": "bedroom", "kind": "doorway" },
+    { "from": "back_hall", "to": "back_hall_closet_1", "kind": "closet_door" },
+    { "from": "back_hall", "to": "back_hall_closet_2", "kind": "closet_door" }
+  ],
+  "sensors": [
+    {
+      "id": "kitchen_main",
+      "name": "Kitchen main",
+      "room_id": "kitchen",
+      "role": "ambient",
+      "is_primary_for_room": true,
+      "manufacturer": "Ecowitt",
+      "placement_notes": "Underside of kitchen table"
+    },
+    {
+      "id": "bathroom_main",
+      "name": "Bathroom main",
+      "room_id": "bathroom",
+      "role": "ambient",
+      "is_primary_for_room": true,
+      "manufacturer": "Ecowitt",
+      "placement_notes": "above bathroom sink"
+    },
+    {
+      "id": "bedroom_main",
+      "name": "Bedroom main",
+      "room_id": "bedroom",
+      "role": "ambient",
+      "is_primary_for_room": true,
+      "manufacturer": "Ecowitt",
+      "placement_notes": "on table near bed"
+    },
+    {
+      "id": "front_hall_main",
+      "name": "Front hall main",
+      "room_id": "front_hall",
+      "role": "ambient",
+      "is_primary_for_room": true,
+      "manufacturer": "Ecowitt",
+      "placement_notes": "on shelf near entry"
+    },
+    {
+      "id": "living_center",
+      "name": "Living room center",
+      "room_id": "living_room",
+      "role": "ambient",
+      "is_primary_for_room": true,
+      "manufacturer": "Ecowitt",
+      "placement_notes": "center of room"
+    },
+    {
+      "id": "back_hall_main",
+      "name": "Back hall main",
+      "room_id": "back_hall",
+      "role": "ambient",
+      "is_primary_for_room": true,
+      "manufacturer": "Ecowitt",
+      "placement_notes": "on shelf"
+    },
+    {
+      "id": "living_radiator",
+      "name": "Living room radiator",
+      "room_id": "living_room",
+      "role": "radiator_proximity",
+      "is_primary_for_room": false,
+      "manufacturer": "Ecowitt",
+      "placement_notes": "on windowsill above radiator"
+    }
+  ],
+  "devices": [
+    {
+      "id": "kitchen_transom",
+      "name": "Kitchen transom",
+      "room_id": "kitchen",
+      "kind": "transom",
+      "control": "alexa",
+      "capabilities": {
+        "power": true,
+        "direction_modes": ["EXHAUST", "DIRECT"],
+        "speed_levels": [1, 2, 3, 4]
+      }
+    },
+    {
+      "id": "bathroom_transom",
+      "name": "Bathroom transom",
+      "room_id": "bathroom",
+      "kind": "transom",
+      "control": "alexa",
+      "capabilities": {
+        "power": true,
+        "direction_modes": ["EXHAUST", "DIRECT"],
+        "speed_levels": [1, 2, 3, 4]
+      }
+    },
+    {
+      "id": "kitchen_vornado_630",
+      "name": "Kitchen Vornado 630",
+      "room_id": "kitchen",
+      "kind": "plug",
+      "control": "meross",
+      "capabilities": {
+        "power": true,
+        "power_only": true
+      }
+    },
+    {
+      "id": "living_vornado_630",
+      "name": "Living room Vornado 630",
+      "room_id": "living_room",
+      "kind": "plug",
+      "control": "meross",
+      "capabilities": {
+        "power": true,
+        "power_only": true
+      }
+    }
+  ]
+}

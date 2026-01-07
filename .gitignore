@@ -1,0 +1,15 @@
+/dist
+/node_modules
+.env
+.DS_Store
+*.log
+config/sites/*.local.json
+config/secrets/**
+!config/secrets/.gitkeep
+config/*.local.json
+config/*/*.local.json
+config/site.config.local.json
+config/site.config.personal.json
+config/sensors.mapping.local.json
+config/alexa.routines.local.json
+.data/

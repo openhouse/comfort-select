@@ -1,0 +1,145 @@
+{
+  "name": "comfort-select",
+  "description": "Comfort-select control loop",
+  "keywords": [
+    "iot",
+    "openai",
+    "google-sheets",
+    "home-automation"
+  ],
+  "env": {
+    "CYCLE_MINUTES": {
+      "description": "Cycle interval minutes",
+      "value": "5"
+    },
+    "TIMEZONE": {
+      "description": "IANA timezone",
+      "value": "America/New_York"
+    },
+    "HOME_LAT": {
+      "description": "Latitude",
+      "value": "40"
+    },
+    "HOME_LON": {
+      "description": "Longitude",
+      "value": "-73"
+    },
+    "OPENAI_API_KEY": {
+      "description": "OpenAI API key"
+    },
+    "OPENAI_MODEL": {
+      "description": "OpenAI model",
+      "value": "gpt-5.2"
+    },
+    "OPENAI_DECISION_MODEL": {
+      "description": "Optional faster/cheaper model for decisions",
+      "value": "gpt-4o-mini"
+    },
+    "OPENAI_TIMEOUT_MS": {
+      "description": "OpenAI SDK timeout in milliseconds",
+      "value": "120000"
+    },
+    "OPENAI_MAX_RETRIES": {
+      "description": "OpenAI SDK max retries",
+      "value": "2"
+    },
+    "PROMPT_TEMPLATE_PATH": {
+      "description": "Path to Handlebars prompt template",
+      "value": "./config/prompt/llm-prompt-template.md.hbs"
+    },
+    "SITE_CONFIG_PATH": {
+      "description": "Path to site JSON config",
+      "value": "./config/site.config.json"
+    },
+    "CURATORS_JSON": {
+      "description": "Optional JSON array string overriding curators"
+    },
+    "HISTORY_MODE": {
+      "description": "History windowing mode: window or full",
+      "value": "window"
+    },
+    "HISTORY_ROWS": {
+      "description": "Rows of history (excluding header) when windowing",
+      "value": "200"
+    },
+    "PROMPT_MAX_CHARS": {
+      "description": "Safety cap for history CSV chars in prompt",
+      "value": "120000"
+    },
+    "HTTP_TIMEOUT_MS": {
+      "description": "Network timeout in milliseconds",
+      "value": "10000"
+    },
+    "GOOGLE_SHEETS_SPREADSHEET_ID": {
+      "description": "Spreadsheet ID"
+    },
+    "GOOGLE_SHEETS_SHEET_NAME": {
+      "description": "Worksheet/tab name",
+      "value": "TimeSeries"
+    },
+    "GOOGLE_SERVICE_ACCOUNT_JSON": {
+      "description": "Service account JSON path in container (mount or dokku config)",
+      "value": "/app/service-account.json"
+    },
+    "MONGODB_URI": {
+      "description": "MongoDB connection string (MONGO_URL also accepted)"
+    },
+    "MONGODB_DB_NAME": {
+      "description": "MongoDB database name",
+      "value": "comfort_select"
+    },
+    "MONGODB_COLLECTION": {
+      "description": "MongoDB collection for cycle records",
+      "value": "cycle_records"
+    },
+    "SHEET_SYNC_ROWS": {
+      "description": "Rows to sync to Google Sheets dashboard from MongoDB",
+      "value": "2000"
+    },
+    "ECOWITT_SOURCE": {
+      "description": "mock or local_gateway or cloud_api",
+      "value": "mock"
+    },
+    "ECOWITT_GATEWAY_URL": {
+      "description": "Ecowitt gateway base URL (local gateway mode)",
+      "value": "http://192.168.1.123"
+    },
+    "ECOWITT_MAPPING_JSON": {
+      "description": "Mapping file path",
+      "value": "./config/sensors.mapping.json"
+    },
+    "ECOWITT_CLOUD_APPLICATION_KEY": {
+      "description": "Ecowitt Cloud application key"
+    },
+    "ECOWITT_CLOUD_API_KEY": {
+      "description": "Ecowitt Cloud API key"
+    },
+    "ECOWITT_CLOUD_DEVICE_MAC": {
+      "description": "Optional specific device MAC address to target"
+    },
+    "DRY_RUN": {
+      "description": "If true, do not actuate",
+      "value": "true"
+    },
+    "ALEXA_WEBHOOK_URL": {
+      "description": "Webhook endpoint for Alexa/Transom commands"
+    },
+    "ALEXA_WEBHOOK_TOKEN": {
+      "description": "Auth token for Alexa webhook"
+    },
+    "MEROSS_WEBHOOK_URL": {
+      "description": "Webhook endpoint for Meross plug commands"
+    },
+    "MEROSS_WEBHOOK_TOKEN": {
+      "description": "Auth token for Meross webhook"
+    },
+    "ROUTINE_MAP_PATH": {
+      "description": "Path to Alexa routine map (or use ALEXA_ROUTINE_MAP_PATH)",
+      "value": "./config/alexa.routines.json"
+    },
+    "PORT": {
+      "description": "HTTP port",
+      "value": "3000"
+    }
+  }
+}
