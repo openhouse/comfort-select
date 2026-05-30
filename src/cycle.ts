@@ -24,7 +24,10 @@ import {
   ActuationResult,
   CycleRecord,
   Decision,
+  DeviceKey,
+  PlugDeviceKey,
   SensorsNow,
+  TransomDeviceKey,
   WeatherNow
 } from "./types.js";
 import { summarizeTelemetry } from "./utils/telemetry.js";
@@ -74,19 +77,73 @@ function plugStateEqual(a?: Decision["actions"]["kitchen_vornado_630"], b?: Deci
   return a.power === b.power;
 }
 
-async function actuate(
+const TRANSOM_DEVICES: TransomDeviceKey[] = ["kitchen_transom", "bathroom_transom"];
+const PLUG_DEVICES: PlugDeviceKey[] = ["kitchen_vornado_630", "living_vornado_630"];
+
+const SAFE_DISABLED_TRANSOM_STATE: Decision["actions"]["kitchen_transom"] = {
+  power: "OFF",
+  direction: "EXHAUST",
+  speed: "LOW",
+  auto: false,
+  set_temp_f: 70
+};
+
+const SAFE_DISABLED_PLUG_STATE: Decision["actions"]["kitchen_vornado_630"] = { power: "OFF" };
+
+function isTransomDevice(device: DeviceKey): device is TransomDeviceKey {
+  return TRANSOM_DEVICES.includes(device as TransomDeviceKey);
+}
+
+function disabledDeviceSet(cfg: AppConfig): Set<DeviceKey> {
+  return new Set(cfg.DISABLED_DEVICES);
+}
+
+function disabledSafeState(device: TransomDeviceKey): Decision["actions"]["kitchen_transom"];
+function disabledSafeState(device: PlugDeviceKey): Decision["actions"]["kitchen_vornado_630"];
+function disabledSafeState(device: DeviceKey): Decision["actions"][DeviceKey] {
+  return structuredClone(isTransomDevice(device) ? SAFE_DISABLED_TRANSOM_STATE : SAFE_DISABLED_PLUG_STATE);
+}
+
+export function applyDisabledDeviceOverrides(decision: Decision, disabledDevices: readonly DeviceKey[]): Decision {
+  if (disabledDevices.length === 0) return decision;
+
+  const next: Decision = structuredClone(decision);
+  for (const device of disabledDevices) {
+    if (isTransomDevice(device)) {
+      next.actions[device] = disabledSafeState(device);
+    } else {
+      next.actions[device] = disabledSafeState(device);
+    }
+    logger.info({ device }, "Device disabled by local config; overriding desired state to safe OFF");
+  }
+  return next;
+}
+
+export async function actuate(
   cfg: AppConfig,
   decision: Decision,
   decisionId: string,
   lastApplied?: Decision["actions"]
 ): Promise<ActuationResult> {
   const errors: string[] = [];
+  const disabledDevices = disabledDeviceSet(cfg);
   const applied: Decision["actions"] = {
     kitchen_transom: structuredClone(lastApplied?.kitchen_transom ?? decision.actions.kitchen_transom),
     bathroom_transom: structuredClone(lastApplied?.bathroom_transom ?? decision.actions.bathroom_transom),
     kitchen_vornado_630: structuredClone(lastApplied?.kitchen_vornado_630 ?? decision.actions.kitchen_vornado_630),
     living_vornado_630: structuredClone(lastApplied?.living_vornado_630 ?? decision.actions.living_vornado_630)
   };
+
+  for (const device of disabledDevices) {
+    if (isTransomDevice(device)) {
+      applied[device] = disabledSafeState(device);
+    } else {
+      applied[device] = disabledSafeState(device);
+    }
+  }
+
+  const activeTransomDevices = TRANSOM_DEVICES.filter((device) => !disabledDevices.has(device));
+  const activePlugDevices = PLUG_DEVICES.filter((plug) => !disabledDevices.has(plug));
 
   if (cfg.DRY_RUN) {
     return { applied, errors, actuation_ok: true };
@@ -95,21 +152,28 @@ async function actuate(
   const alexaDryRun = cfg.DRY_RUN || !cfg.ALEXA_WEBHOOK_URL;
   const merossDryRun = cfg.DRY_RUN || !cfg.MEROSS_WEBHOOK_URL;
 
-  if (!cfg.ALEXA_WEBHOOK_URL && !cfg.DRY_RUN) {
+  if (activeTransomDevices.length > 0 && !cfg.ALEXA_WEBHOOK_URL && !cfg.DRY_RUN) {
     errors.push("Transom actuator skipped: ALEXA_WEBHOOK_URL not configured");
   }
-  if (!cfg.MEROSS_WEBHOOK_URL && !cfg.DRY_RUN) {
+  if (activePlugDevices.length > 0 && !cfg.MEROSS_WEBHOOK_URL && !cfg.DRY_RUN) {
     errors.push("Plug actuator skipped: MEROSS_WEBHOOK_URL not configured");
   }
 
+  for (const device of disabledDevices) {
+    logger.info({ device }, "Device disabled by local config; skipping actuator call and recording safe OFF");
+  }
+
   // Transoms (Alexa webhook)
-  const transomDevices: ("kitchen_transom" | "bathroom_transom")[] = ["kitchen_transom", "bathroom_transom"];
-  for (const device of transomDevices) {
+  for (const device of activeTransomDevices) {
     const requested = decision.actions[device];
     const previous = lastApplied?.[device];
+
     if (previous && transomStateEqual(previous, requested)) {
       applied[device] = previous;
-      continue;
+      if (!cfg.ACTUATION_REASSERT_EVERY_CYCLE) {
+        continue;
+      }
+      logger.info({ device }, "Reasserting requested transom state despite matching last applied state");
     }
 
     if (!cfg.ALEXA_WEBHOOK_URL && !cfg.DRY_RUN) {
@@ -135,13 +199,16 @@ async function actuate(
   }
 
   // Meross plugs (webhook)
-  const plugDevices: ("kitchen_vornado_630" | "living_vornado_630")[] = ["kitchen_vornado_630", "living_vornado_630"];
-  for (const plug of plugDevices) {
+  for (const plug of activePlugDevices) {
     const requested = decision.actions[plug];
     const previous = lastApplied?.[plug];
+
     if (previous && plugStateEqual(previous, requested)) {
       applied[plug] = previous;
-      continue;
+      if (!cfg.ACTUATION_REASSERT_EVERY_CYCLE) {
+        continue;
+      }
+      logger.info({ device: plug }, "Reasserting requested plug state despite matching last applied state");
     }
 
     if (!cfg.MEROSS_WEBHOOK_URL && !cfg.DRY_RUN) {
@@ -331,6 +398,7 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
   }
 
   decision = applySanity(decision);
+  decision = applyDisabledDeviceOverrides(decision, cfg.DISABLED_DEVICES);
 
   let actuation: ActuationResult;
   if (blockingErrors.length > 0 || decisionErrors.length > 0) {
