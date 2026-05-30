@@ -165,6 +165,15 @@ export interface PredictionEntry {
   rh_pct_delta: number | null;
 }
 
+export type DeviceKey =
+  | "kitchen_transom"
+  | "bathroom_transom"
+  | "kitchen_vornado_630"
+  | "living_vornado_630";
+
+export type TransomDeviceKey = "kitchen_transom" | "bathroom_transom";
+export type PlugDeviceKey = "kitchen_vornado_630" | "living_vornado_630";
+
 export interface Decision {
   panel: DecisionPanelNote[];
   actions: {

@@ -1,7 +1,35 @@
 import { z } from "zod";
 import dotenv from "dotenv";
+import { DeviceKey } from "./types.js";
 
 dotenv.config();
+
+const DEVICE_KEYS = [
+  "kitchen_transom",
+  "bathroom_transom",
+  "kitchen_vornado_630",
+  "living_vornado_630"
+] as const satisfies readonly DeviceKey[];
+
+const deviceKeySet = new Set<string>(DEVICE_KEYS);
+
+function parseBooleanEnv(value: string): boolean {
+  return value.trim().toLowerCase() === "true";
+}
+
+export function parseDisabledDevices(value: string): DeviceKey[] {
+  const devices = value
+    .split(",")
+    .map((device) => device.trim())
+    .filter((device) => device.length > 0);
+
+  const invalidDevices = devices.filter((device) => !deviceKeySet.has(device));
+  if (invalidDevices.length > 0) {
+    throw new Error(`Invalid DISABLED_DEVICES value(s): ${invalidDevices.join(", ")}`);
+  }
+
+  return Array.from(new Set(devices)) as DeviceKey[];
+}
 
 const EnvSchema = z.object({
   CYCLE_MINUTES: z.coerce.number().int().positive().default(5),
@@ -33,6 +61,22 @@ const EnvSchema = z.object({
   SHEET_SYNC_ROWS: z.coerce.number().int().positive().default(2000),
 
   HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+
+  ACTUATION_REASSERT_EVERY_CYCLE: z
+    .string()
+    .default("false")
+    .transform(parseBooleanEnv),
+  DISABLED_DEVICES: z
+    .string()
+    .default("")
+    .transform((value, ctx) => {
+      try {
+        return parseDisabledDevices(value);
+      } catch (e: any) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: e?.message ?? String(e) });
+        return z.NEVER;
+      }
+    }),
 
   ECOWITT_SOURCE: z.enum(["mock", "local_gateway", "cloud_api"]).default("mock"),
   ECOWITT_GATEWAY_URL: z.string().optional(),
