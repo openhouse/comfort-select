@@ -165,6 +165,12 @@ export interface PredictionEntry {
   rh_pct_delta: number | null;
 }
 
+export type DeviceKey =
+  | "kitchen_transom"
+  | "bathroom_transom"
+  | "kitchen_vornado_630"
+  | "living_vornado_630";
+
 export interface Decision {
   panel: DecisionPanelNote[];
   actions: {
@@ -183,6 +189,7 @@ export interface ActuationResult {
   applied: Decision["actions"];
   errors: string[];
   actuation_ok: boolean;
+  disabled_devices?: DeviceKey[];
 }
 
 export interface CycleRecord {
