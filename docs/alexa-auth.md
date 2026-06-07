@@ -7,9 +7,10 @@ This project now uses [`alexa-cookie2`](https://www.npmjs.com/package/alexa-cook
 Add/update these in your `.env` (defaults are shown in `.env.example`):
 
 - `ALEXA_COOKIE_JSON=./config/secrets/alexa-cookie.json` (path to persisted cookie JSON)
-- `ALEXA_AMAZON_DOMAIN` (e.g., `amazon.com`)
+- `ALEXA_AMAZON_DOMAIN` / `ALEXA_AMAZON_PAGE` (e.g., `amazon.com`)
 - `ALEXA_SERVICE_HOST` (regional Alexa API host, e.g., `pitangui.amazon.com`)
 - `ALEXA_ACCEPT_LANGUAGE` (e.g., `en-US`)
+- `ALEXA_AMAZON_PAGE_PROXY_LANGUAGE` (Amazon sign-in page locale for `alexa-cookie2`; defaults to `en_US`; `ALEXA_COOKIE_PROXY_LANGUAGE` is accepted as a fallback alias)
 - `ALEXA_USER_AGENT` (use a realistic browser UA string)
 - `ALEXA_COOKIE_PROXY_PORT` (e.g., `3456`)
 - `ALEXA_COOKIE_PROXY_OWN_IP` / `ALEXA_COOKIE_PROXY_LISTEN_BIND` (proxy host/bind for the browser flow)
@@ -29,6 +30,24 @@ npm run alexa:cookie:init
 1. The script prints a proxy URL (e.g., `http://localhost:3456/`).
 2. Open it in your browser and complete the Amazon login/MFA flow.
 3. On success, the full registration object is written to `config/secrets/alexa-cookie.json` (or your configured path).
+
+The proxy helper persists its small former-data cache next to the cookie file as `config/secrets/alexa-former-data.json` by default, instead of using `node_modules/alexa-cookie2/lib/formerDataStore.json`. If the MFA/app-code flow gets stuck or redirects to an Amazon `/404`, move the failed cookie JSON aside and retry with an explicit US domain/language setup:
+
+```bash
+mv config/secrets/alexa-cookie.json config/secrets/alexa-cookie.failed.json 2>/dev/null || true
+rm -f config/secrets/alexa-former-data.json node_modules/alexa-cookie2/lib/formerDataStore.json
+
+ALEXA_AMAZON_DOMAIN=amazon.com \
+ALEXA_AMAZON_PAGE=amazon.com \
+ALEXA_ACCEPT_LANGUAGE=en-US \
+ALEXA_AMAZON_PAGE_PROXY_LANGUAGE=en_US \
+ALEXA_COOKIE_PROXY_PORT=3457 \
+ALEXA_COOKIE_PROXY_OWN_IP=localhost \
+ALEXA_COOKIE_PROXY_LISTEN_BIND=127.0.0.1 \
+npm run alexa:cookie:init
+```
+
+The initial Amazon sign-in URL should include `language=en_US`. Proxy logs redact raw cookie headers and long Amazon auth cookie values by default.
 
 ## Refresh an existing cookie (no browser)
 
