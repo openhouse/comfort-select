@@ -11,10 +11,20 @@ const cookieRel = process.env.ALEXA_COOKIE_PATH ?? process.env.ALEXA_COOKIE_JSON
 const cookiePath = path.isAbsolute(cookieRel) ? cookieRel : path.join(projectRoot, cookieRel);
 const amazonPage = process.env.ALEXA_AMAZON_PAGE ?? process.env.ALEXA_AMAZON_DOMAIN ?? "amazon.com";
 const acceptLanguage = process.env.ALEXA_ACCEPT_LANGUAGE ?? "en-US";
+const amazonPageProxyLanguage =
+  process.env.ALEXA_AMAZON_PAGE_PROXY_LANGUAGE || process.env.ALEXA_COOKIE_PROXY_LANGUAGE || "en_US";
 const proxyPort = Number(process.env.ALEXA_COOKIE_PROXY_PORT ?? 3456);
 const proxyOwnIp = process.env.ALEXA_COOKIE_PROXY_OWN_IP ?? process.env.ALEXA_PROXY_OWN_IP ?? "localhost";
 const proxyListenBind = process.env.ALEXA_COOKIE_PROXY_LISTEN_BIND ?? "127.0.0.1";
 const baseAmazonPage = process.env.ALEXA_AMAZON_DOMAIN ?? process.env.ALEXA_AMAZON_PAGE ?? amazonPage;
+const formerDataStorePath = path.join(path.dirname(cookiePath), "alexa-former-data.json");
+
+type FormerAlexaData = {
+  frc?: string;
+  "map-md"?: string;
+  deviceId?: string;
+  [key: string]: unknown;
+};
 
 async function readExistingRegistration() {
   try {
@@ -30,6 +40,40 @@ async function readExistingRegistration() {
   }
 }
 
+async function readFormerDataStore(): Promise<FormerAlexaData | undefined> {
+  try {
+    const raw = await fs.readFile(formerDataStorePath, "utf-8");
+    const parsed = JSON.parse(raw) as FormerAlexaData;
+    console.log(`[alexa-cookie] Found former proxy data at ${formerDataStorePath}`);
+    return {
+      frc: parsed.frc,
+      "map-md": parsed["map-md"],
+      deviceId: parsed.deviceId
+    };
+  } catch (err: any) {
+    if (err?.code !== "ENOENT") {
+      console.warn(`[alexa-cookie] Unable to read former proxy data at ${formerDataStorePath}: ${err.message ?? err}`);
+    }
+    return undefined;
+  }
+}
+
+function safeAlexaCookieLogger(msg: unknown): void {
+  const raw = String(msg);
+
+  const redacted = raw
+    .replace(/"cookie":"[^"]*"/gi, '"cookie":"[REDACTED]"')
+    .replace(/"Cookie":"[^"]*"/g, '"Cookie":"[REDACTED]"')
+    .replace(/Cookies handled: "[^"]*"/g, 'Cookies handled: "[REDACTED]"')
+    .replace(/Proxy catched cookie: .*/g, 'Proxy catched cookie: [REDACTED]')
+    .replace(
+      /((?:session-token|at-main|sess-at-main|csrf|ubid-[^=]*|x-main|session-id|session-id-time)=)[^;"\s]+/gi,
+      "$1[REDACTED]"
+    );
+
+  console.log(redacted);
+}
+
 async function writeCookieFile(data: any) {
   await fs.mkdir(path.dirname(cookiePath), { recursive: true });
   const payload = { ...data, updatedAt: new Date().toISOString() };
@@ -38,7 +82,11 @@ async function writeCookieFile(data: any) {
 }
 
 async function generateCookie() {
-  const formerRegistrationData = await readExistingRegistration();
+  const existingRegistrationData = await readExistingRegistration();
+  const formerDataStore = await readFormerDataStore();
+  const formerRegistrationData = existingRegistrationData ?? formerDataStore ?? {};
+
+  await fs.mkdir(path.dirname(formerDataStorePath), { recursive: true });
 
   const options = {
     setupProxy: true,
@@ -47,22 +95,26 @@ async function generateCookie() {
     proxyOwnIp,
     proxyListenBind,
     acceptLanguage,
+    amazonPageProxyLanguage,
+    formerDataStorePath,
     amazonPage,
     baseAmazonPage,
-    logger: (msg: unknown) => console.log(String(msg)),
+    logger: safeAlexaCookieLogger,
     formerRegistrationData
   };
 
   console.log("[alexa-cookie] Starting proxy login flow...");
   console.log(`[alexa-cookie] Open http://${proxyOwnIp}:${proxyPort}/ in your browser to continue.`);
   console.log(`[alexa-cookie] Writing cookie JSON to ${cookiePath}`);
+  console.log(`[alexa-cookie] Using Amazon page proxy language ${amazonPageProxyLanguage}`);
+  console.log(`[alexa-cookie] Persisting former proxy data to ${formerDataStorePath}`);
 
   const cookieData: any = await new Promise((resolve, reject) => {
     let sawInstruction = false;
     const callback = (err: any, result: any) => {
       if (result) return resolve(result);
       if (err && !result) {
-        console.log(err?.message ?? String(err));
+        safeAlexaCookieLogger(err?.message ?? String(err));
         if (sawInstruction) {
           return reject(err);
         }
