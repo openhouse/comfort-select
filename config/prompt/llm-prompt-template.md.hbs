@@ -68,15 +68,14 @@ Then decide on optimal device states.
 Return ONLY JSON matching this schema (no commentary):
 {
   "panel": [
-    { "speaker": "Gail S. Brager", "notes": "..." },
-    { "speaker": "Stefano Schiavon", "notes": "..." },
-    { "speaker": "Deborah Treisman", "notes": "..." }
+    { "speaker": "<one exact configured curator label>", "notes": "..." }
   ],
   "actions": {
     "kitchen_transom": { "power": "ON|OFF", "direction": "EXHAUST|DIRECT", "speed": "LOW|MED|HIGH|TURBO", "auto": boolean, "set_temp_f": 60-90 },
     "bathroom_transom": { "power": "ON|OFF", "direction": "EXHAUST|DIRECT", "speed": "LOW|MED|HIGH|TURBO", "auto": boolean, "set_temp_f": 60-90 },
     "kitchen_vornado_630": { "power": "ON|OFF" },
-    "living_vornado_630": { "power": "ON|OFF" }
+    "living_vornado_630": { "power": "ON|OFF" },
+    "bedroom_ceiling_fan": { "power": "ON|OFF" }
   },
   "hypothesis": "string",
   "confidence_0_1": 0-1,
@@ -86,7 +85,11 @@ Return ONLY JSON matching this schema (no commentary):
 }
 
 {{! - Devices are keyed by device ID (not room). }}
+- `panel` must include one entry for each configured curator, using the exact configured speaker labels.
 - Vornado 630 plugs are power-only (fan speed set manually on device).
+- Bedroom ceiling fan is power-only via Leviton DN15S/Alexa.
+- Fan speed, rotation direction, and light state are manually set at the fixture and are not controllable by comfort-select.
+- Current manual bedroom fan state may be noted in site config, but the only valid action is ON/OFF.
 - Vornado Transom AE fans: only on/off + direction + speed; auto/set_temp_f optional if useful.
 - Direction meanings: EXHAUST (pull out), DIRECT (intake).
 {{! - Use available gradients (e.g., living_radiator_delta_f) and connectivity to reason about flow paths. /}}

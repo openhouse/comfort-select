@@ -234,6 +234,22 @@
         "power": true,
         "power_only": true
       }
+    },
+    {
+      "id": "bedroom_ceiling_fan",
+      "name": "Bedroom Ceiling Fan",
+      "room_id": "bedroom",
+      "kind": "ceiling_fan_light_on_off",
+      "control": "alexa",
+      "capabilities": {
+        "power": true,
+        "constraints": [
+          "on/off only",
+          "fan speed set manually on fixture",
+          "light state set manually on fixture"
+        ]
+      },
+      "placement_notes": "Ceiling-mounted bedroom fan/light"
     }
   ]
 }

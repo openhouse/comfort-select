@@ -1,4 +1,4 @@
-import { TransomState } from "../../types.js";
+import { AlexaPowerDeviceKey, PowerState, TransomState } from "../../types.js";
 
 import { fetchWithTimeout } from "../../utils/fetchWithTimeout.js";
 
@@ -27,6 +27,37 @@ export async function setTransomState(
     },
     body: JSON.stringify({
       kind: "vornado_transom_ae",
+      device: params.device,
+      state: params.state,
+      decision_id: params.decisionId
+    })
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new Error(`Alexa webhook failed: ${resp.status} ${resp.statusText} ${text}`);
+  }
+}
+
+
+export async function setAlexaPowerState(
+  cfg: AlexaWebhookConfig,
+  params: { device: AlexaPowerDeviceKey; state: PowerState; decisionId: string }
+): Promise<void> {
+  if (cfg.dryRun) return;
+  if (!cfg.url) {
+    throw new Error("Alexa webhook missing URL");
+  }
+
+  const resp = await fetchWithTimeout(cfg.url, {
+    method: "POST",
+    timeoutMs: cfg.timeoutMs,
+    headers: {
+      "content-type": "application/json",
+      ...(cfg.token ? { authorization: `Bearer ${cfg.token}` } : {})
+    },
+    body: JSON.stringify({
+      kind: "alexa_power_switch",
       device: params.device,
       state: params.state,
       decision_id: params.decisionId

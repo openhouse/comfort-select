@@ -8,6 +8,7 @@ test("parseDisabledDevices trims whitespace and deduplicates device keys", () =>
     "bathroom_transom",
     "living_vornado_630"
   ]);
+  assert.deepEqual(parseDisabledDevices("bedroom_ceiling_fan"), ["bedroom_ceiling_fan"]);
 });
 
 test("parseDisabledDevices rejects unknown device keys", () => {

@@ -150,9 +150,11 @@ export interface TransomState {
   set_temp_f: number; // 60-90 (meaningful if auto=true)
 }
 
-export interface PlugState {
+export interface PowerState {
   power: "ON" | "OFF";
 }
+
+export interface PlugState extends PowerState {}
 
 export interface DecisionPanelNote {
   speaker: string;
@@ -169,18 +171,23 @@ export type DeviceKey =
   | "kitchen_transom"
   | "bathroom_transom"
   | "kitchen_vornado_630"
-  | "living_vornado_630";
+  | "living_vornado_630"
+  | "bedroom_ceiling_fan";
 
 export type TransomDeviceKey = "kitchen_transom" | "bathroom_transom";
-export type PlugDeviceKey = "kitchen_vornado_630" | "living_vornado_630";
+export type MerossPlugDeviceKey = "kitchen_vornado_630" | "living_vornado_630";
+export type AlexaPowerDeviceKey = "bedroom_ceiling_fan";
+export type PowerOnlyDeviceKey = MerossPlugDeviceKey | AlexaPowerDeviceKey;
+export type PlugDeviceKey = MerossPlugDeviceKey;
 
 export interface Decision {
   panel: DecisionPanelNote[];
   actions: {
     kitchen_transom: TransomState;
     bathroom_transom: TransomState;
-    kitchen_vornado_630: PlugState;
-    living_vornado_630: PlugState;
+    kitchen_vornado_630: PowerState;
+    living_vornado_630: PowerState;
+    bedroom_ceiling_fan: PowerState;
   };
   hypothesis: string;
   confidence_0_1: number;

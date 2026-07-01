@@ -119,7 +119,7 @@ function transomStateEqual(a?: TransomState, b?: TransomState): boolean {
   return a.power === b.power && a.direction === b.direction && a.speed === b.speed && a.auto === b.auto && a.set_temp_f === b.set_temp_f;
 }
 
-function plugStateEqual(a?: PlugState, b?: PlugState): boolean {
+function powerStateEqual(a?: PlugState, b?: PlugState): boolean {
   if (!a || !b) return false;
   return a.power === b.power;
 }
@@ -130,7 +130,7 @@ function describeTransomState(state?: TransomState): string {
   return `${state.direction}/${state.speed}`;
 }
 
-function describePlugState(state?: PlugState): string {
+function describePowerState(state?: PlugState): string {
   if (!state) return "unknown";
   return state.power;
 }
@@ -141,26 +141,28 @@ function findLastActuationChange(records: CycleRecord[]): string | null {
     const prev = records[i - 1];
     if (!current?.actuation?.applied || !prev?.actuation?.applied) continue;
 
-    const pairs: [string, any, any][] = [
-      ["kitchen_transom", current.actuation.applied.kitchen_transom, prev.actuation.applied.kitchen_transom],
-      ["bathroom_transom", current.actuation.applied.bathroom_transom, prev.actuation.applied.bathroom_transom],
-      ["kitchen_vornado_630", current.actuation.applied.kitchen_vornado_630, prev.actuation.applied.kitchen_vornado_630],
-      ["living_vornado_630", current.actuation.applied.living_vornado_630, prev.actuation.applied.living_vornado_630]
-    ];
+    const deviceIds = Array.from(
+      new Set([...Object.keys(current.actuation.applied), ...Object.keys(prev.actuation.applied)])
+    );
+    const pairs: [string, any, any][] = deviceIds.map((device) => [
+      device,
+      current.actuation.applied[device as keyof Decision["actions"]],
+      prev.actuation.applied[device as keyof Decision["actions"]]
+    ]);
 
     for (const [device, nowState, prevState] of pairs) {
       if (
         (device.includes("transom") && !transomStateEqual(nowState, prevState)) ||
-        (device.includes("vornado") && !plugStateEqual(nowState, prevState))
+        (!device.includes("transom") && !powerStateEqual(nowState, prevState))
       ) {
         const describe =
           device.includes("transom") && nowState?.direction
             ? describeTransomState(nowState)
-            : describePlugState(nowState);
+            : describePowerState(nowState);
         const describePrev =
           device.includes("transom") && prevState?.direction
             ? describeTransomState(prevState)
-            : describePlugState(prevState);
+            : describePowerState(prevState);
         return `${device} changed ${describePrev} -> ${describe} at ${current.timestamp_local_iso}`;
       }
     }

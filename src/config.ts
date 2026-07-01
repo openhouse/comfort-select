@@ -8,7 +8,8 @@ const DEVICE_KEYS = [
   "kitchen_transom",
   "bathroom_transom",
   "kitchen_vornado_630",
-  "living_vornado_630"
+  "living_vornado_630",
+  "bedroom_ceiling_fan"
 ] as const satisfies readonly DeviceKey[];
 
 const deviceKeySet = new Set<string>(DEVICE_KEYS);
