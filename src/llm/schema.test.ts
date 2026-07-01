@@ -28,3 +28,41 @@ test("comfort decision schema requires every property", () => {
   assert.equal(predictionEntry.properties.temp_f_delta.nullable, true);
   assert.equal(predictionEntry.properties.rh_pct_delta.nullable, true);
 });
+
+
+test("comfort decision schema accepts bedroom ceiling fan power action", () => {
+  const schema = buildDecisionSchema(["Curator"]);
+  const parsed = schema.parse({
+    panel: [{ speaker: "Curator", notes: "ok" }],
+    actions: {
+      kitchen_transom: { power: "OFF", direction: "EXHAUST", speed: "LOW", auto: false, set_temp_f: 70 },
+      bathroom_transom: { power: "OFF", direction: "EXHAUST", speed: "LOW", auto: false, set_temp_f: 70 },
+      kitchen_vornado_630: { power: "OFF" },
+      living_vornado_630: { power: "OFF" },
+      bedroom_ceiling_fan: { power: "ON" }
+    },
+    hypothesis: "test",
+    confidence_0_1: 0.5,
+    predictions: []
+  });
+
+  assert.deepEqual(parsed.actions.bedroom_ceiling_fan, { power: "ON" });
+});
+
+test("comfort decision schema rejects missing bedroom ceiling fan action", () => {
+  const schema = buildDecisionSchema(["Curator"]);
+  assert.throws(() =>
+    schema.parse({
+      panel: [{ speaker: "Curator", notes: "ok" }],
+      actions: {
+        kitchen_transom: { power: "OFF", direction: "EXHAUST", speed: "LOW", auto: false, set_temp_f: 70 },
+        bathroom_transom: { power: "OFF", direction: "EXHAUST", speed: "LOW", auto: false, set_temp_f: 70 },
+        kitchen_vornado_630: { power: "OFF" },
+        living_vornado_630: { power: "OFF" }
+      },
+      hypothesis: "test",
+      confidence_0_1: 0.5,
+      predictions: []
+    })
+  );
+});

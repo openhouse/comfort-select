@@ -18,14 +18,15 @@ import { buildPromptHistoryWindow } from "./history/promptHistory.js";
 import { buildPrompt } from "./llm/prompt.js";
 import { decideWithOpenAI } from "./llm/openaiDecider.js";
 import { applySanity } from "./policy/sanity.js";
-import { setTransomState } from "./adapters/actuators/alexaWebhook.js";
+import { setAlexaPowerState, setTransomState } from "./adapters/actuators/alexaWebhook.js";
 import { setPlugState } from "./adapters/actuators/merossWebhook.js";
 import {
   ActuationResult,
   CycleRecord,
   Decision,
   DeviceKey,
-  PlugDeviceKey,
+  AlexaPowerDeviceKey,
+  MerossPlugDeviceKey,
   SensorsNow,
   TransomDeviceKey,
   WeatherNow
@@ -59,7 +60,8 @@ function noopDecision(reason: string, speakers: string[]): Decision {
         set_temp_f: 70
       },
       kitchen_vornado_630: { power: "OFF" },
-      living_vornado_630: { power: "OFF" }
+      living_vornado_630: { power: "OFF" },
+      bedroom_ceiling_fan: { power: "OFF" }
     },
     hypothesis: `Fallback no-op decision due to error: ${reason}`,
     confidence_0_1: 0,
@@ -72,13 +74,14 @@ function transomStateEqual(a?: Decision["actions"]["kitchen_transom"], b?: Decis
   return a.power === b.power && a.direction === b.direction && a.speed === b.speed && a.auto === b.auto && a.set_temp_f === b.set_temp_f;
 }
 
-function plugStateEqual(a?: Decision["actions"]["kitchen_vornado_630"], b?: Decision["actions"]["kitchen_vornado_630"]) {
+function powerStateEqual(a?: Decision["actions"]["kitchen_vornado_630"], b?: Decision["actions"]["kitchen_vornado_630"]) {
   if (!a || !b) return false;
   return a.power === b.power;
 }
 
 const TRANSOM_DEVICES: TransomDeviceKey[] = ["kitchen_transom", "bathroom_transom"];
-const PLUG_DEVICES: PlugDeviceKey[] = ["kitchen_vornado_630", "living_vornado_630"];
+const MEROSS_PLUG_DEVICES: MerossPlugDeviceKey[] = ["kitchen_vornado_630", "living_vornado_630"];
+const ALEXA_POWER_DEVICES: AlexaPowerDeviceKey[] = ["bedroom_ceiling_fan"];
 
 const SAFE_DISABLED_TRANSOM_STATE: Decision["actions"]["kitchen_transom"] = {
   power: "OFF",
@@ -98,8 +101,6 @@ function disabledDeviceSet(cfg: AppConfig): Set<DeviceKey> {
   return new Set(cfg.DISABLED_DEVICES);
 }
 
-function disabledSafeState(device: TransomDeviceKey): Decision["actions"]["kitchen_transom"];
-function disabledSafeState(device: PlugDeviceKey): Decision["actions"]["kitchen_vornado_630"];
 function disabledSafeState(device: DeviceKey): Decision["actions"][DeviceKey] {
   return structuredClone(isTransomDevice(device) ? SAFE_DISABLED_TRANSOM_STATE : SAFE_DISABLED_PLUG_STATE);
 }
@@ -109,11 +110,7 @@ export function applyDisabledDeviceOverrides(decision: Decision, disabledDevices
 
   const next: Decision = structuredClone(decision);
   for (const device of disabledDevices) {
-    if (isTransomDevice(device)) {
-      next.actions[device] = disabledSafeState(device);
-    } else {
-      next.actions[device] = disabledSafeState(device);
-    }
+    (next.actions as Record<DeviceKey, Decision["actions"][DeviceKey]>)[device] = disabledSafeState(device);
     logger.info({ device }, "Device disabled by local config; overriding desired state to safe OFF");
   }
   return next;
@@ -131,19 +128,17 @@ export async function actuate(
     kitchen_transom: structuredClone(lastApplied?.kitchen_transom ?? decision.actions.kitchen_transom),
     bathroom_transom: structuredClone(lastApplied?.bathroom_transom ?? decision.actions.bathroom_transom),
     kitchen_vornado_630: structuredClone(lastApplied?.kitchen_vornado_630 ?? decision.actions.kitchen_vornado_630),
-    living_vornado_630: structuredClone(lastApplied?.living_vornado_630 ?? decision.actions.living_vornado_630)
+    living_vornado_630: structuredClone(lastApplied?.living_vornado_630 ?? decision.actions.living_vornado_630),
+    bedroom_ceiling_fan: structuredClone(lastApplied?.bedroom_ceiling_fan ?? decision.actions.bedroom_ceiling_fan)
   };
 
   for (const device of disabledDevices) {
-    if (isTransomDevice(device)) {
-      applied[device] = disabledSafeState(device);
-    } else {
-      applied[device] = disabledSafeState(device);
-    }
+    (applied as Record<DeviceKey, Decision["actions"][DeviceKey]>)[device] = disabledSafeState(device);
   }
 
   const activeTransomDevices = TRANSOM_DEVICES.filter((device) => !disabledDevices.has(device));
-  const activePlugDevices = PLUG_DEVICES.filter((plug) => !disabledDevices.has(plug));
+  const activePlugDevices = MEROSS_PLUG_DEVICES.filter((plug) => !disabledDevices.has(plug));
+  const activeAlexaPowerDevices = ALEXA_POWER_DEVICES.filter((device) => !disabledDevices.has(device));
 
   if (cfg.DRY_RUN) {
     return { applied, errors, actuation_ok: true };
@@ -152,8 +147,8 @@ export async function actuate(
   const alexaDryRun = cfg.DRY_RUN || !cfg.ALEXA_WEBHOOK_URL;
   const merossDryRun = cfg.DRY_RUN || !cfg.MEROSS_WEBHOOK_URL;
 
-  if (activeTransomDevices.length > 0 && !cfg.ALEXA_WEBHOOK_URL && !cfg.DRY_RUN) {
-    errors.push("Transom actuator skipped: ALEXA_WEBHOOK_URL not configured");
+  if ((activeTransomDevices.length > 0 || activeAlexaPowerDevices.length > 0) && !cfg.ALEXA_WEBHOOK_URL && !cfg.DRY_RUN) {
+    errors.push("Alexa actuator skipped: ALEXA_WEBHOOK_URL not configured");
   }
   if (activePlugDevices.length > 0 && !cfg.MEROSS_WEBHOOK_URL && !cfg.DRY_RUN) {
     errors.push("Plug actuator skipped: MEROSS_WEBHOOK_URL not configured");
@@ -198,12 +193,48 @@ export async function actuate(
     }
   }
 
+
+  // Alexa power-only devices (webhook)
+  for (const device of activeAlexaPowerDevices) {
+    const requested = decision.actions[device];
+    const previous = lastApplied?.[device];
+
+    if (previous && powerStateEqual(previous, requested)) {
+      applied[device] = previous;
+      if (!cfg.ACTUATION_REASSERT_EVERY_CYCLE) {
+        continue;
+      }
+      logger.info({ device }, "Reasserting requested Alexa power state despite matching last applied state");
+    }
+
+    if (!cfg.ALEXA_WEBHOOK_URL && !cfg.DRY_RUN) {
+      applied[device] = previous ?? requested;
+      continue;
+    }
+
+    try {
+      await setAlexaPowerState(
+        {
+          url: cfg.ALEXA_WEBHOOK_URL,
+          token: cfg.ALEXA_WEBHOOK_TOKEN,
+          dryRun: alexaDryRun,
+          timeoutMs: cfg.HTTP_TIMEOUT_MS
+        },
+        { device, state: requested, decisionId }
+      );
+      applied[device] = requested;
+    } catch (e: any) {
+      applied[device] = previous ?? requested;
+      errors.push(`${device}: ${e?.message ?? String(e)}`);
+    }
+  }
+
   // Meross plugs (webhook)
   for (const plug of activePlugDevices) {
     const requested = decision.actions[plug];
     const previous = lastApplied?.[plug];
 
-    if (previous && plugStateEqual(previous, requested)) {
+    if (previous && powerStateEqual(previous, requested)) {
       applied[plug] = previous;
       if (!cfg.ACTUATION_REASSERT_EVERY_CYCLE) {
         continue;

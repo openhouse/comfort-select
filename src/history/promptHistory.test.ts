@@ -25,7 +25,8 @@ function buildDecision(): Decision {
       kitchen_transom: { power: "ON", direction: "EXHAUST", speed: "LOW", auto: false, set_temp_f: 70 },
       bathroom_transom: { power: "OFF", direction: "EXHAUST", speed: "LOW", auto: false, set_temp_f: 70 },
       kitchen_vornado_630: { power: "OFF" },
-      living_vornado_630: { power: "ON" }
+      living_vornado_630: { power: "ON" },
+      bedroom_ceiling_fan: { power: "OFF" }
     },
     hypothesis: "test decision",
     confidence_0_1: 0.5,

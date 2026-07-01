@@ -16,7 +16,8 @@ function buildDecision(): Decision {
       kitchen_transom: { power: "ON", direction: "DIRECT", speed: "HIGH", auto: false, set_temp_f: 70 },
       bathroom_transom: { power: "ON", direction: "EXHAUST", speed: "LOW", auto: false, set_temp_f: 70 },
       kitchen_vornado_630: { power: "ON" },
-      living_vornado_630: { power: "ON" }
+      living_vornado_630: { power: "ON" },
+      bedroom_ceiling_fan: { power: "ON" }
     },
     hypothesis: "test decision",
     confidence_0_1: 0.8,
@@ -121,11 +122,11 @@ test("actuate reasserts matching requested states when enabled", async () => {
   );
 
   assert.equal(result.actuation_ok, true);
-  assert.equal(alexa.bodies.length, 2, "both active transoms should be commanded even when last-applied matches");
+  assert.equal(alexa.bodies.length, 3, "both active transoms should be commanded even when last-applied matches");
   assert.equal(meross.bodies.length, 2, "both active plugs should be commanded even when last-applied matches");
   assert.deepEqual(
     [...alexa.bodies.map((body) => body.device), ...meross.bodies.map((body) => body.plug)].sort(),
-    ["bathroom_transom", "kitchen_transom", "kitchen_vornado_630", "living_vornado_630"].sort()
+    ["bathroom_transom", "bedroom_ceiling_fan", "kitchen_transom", "kitchen_vornado_630", "living_vornado_630"].sort()
   );
 });
 
@@ -155,16 +156,16 @@ test("disabled devices are forced safe OFF and skipped without actuation errors"
     set_temp_f: 70
   });
   assert.deepEqual(decision.actions.bathroom_transom, result.applied.bathroom_transom);
-  assert.deepEqual(alexa.bodies.map((body) => body.device), ["kitchen_transom"]);
+  assert.deepEqual(alexa.bodies.map((body) => body.device).sort(), ["bedroom_ceiling_fan", "kitchen_transom"].sort());
   assert.deepEqual(meross.bodies.map((body) => body.plug).sort(), ["kitchen_vornado_630", "living_vornado_630"].sort());
 });
 
 test("missing Alexa webhook is not an error when all transoms are disabled", async () => {
   const meross = await startWebhookRecorder();
-  const decision = applyDisabledDeviceOverrides(buildDecision(), ["kitchen_transom", "bathroom_transom"]);
+  const decision = applyDisabledDeviceOverrides(buildDecision(), ["kitchen_transom", "bathroom_transom", "bedroom_ceiling_fan"]);
   const result = await actuate(
     buildConfig({
-      DISABLED_DEVICES: ["kitchen_transom", "bathroom_transom"],
+      DISABLED_DEVICES: ["kitchen_transom", "bathroom_transom", "bedroom_ceiling_fan"],
       MEROSS_WEBHOOK_URL: meross.url
     }),
     decision,
@@ -200,7 +201,7 @@ test("missing Alexa webhook is still an error when any transom is active", async
     "decision-test"
   );
 
-  assert.ok(result.errors.includes("Transom actuator skipped: ALEXA_WEBHOOK_URL not configured"));
+  assert.ok(result.errors.includes("Alexa actuator skipped: ALEXA_WEBHOOK_URL not configured"));
   assert.equal(result.actuation_ok, false);
 });
 
@@ -237,3 +238,59 @@ test("missing Meross webhook is still an error when any plug is active", async (
   assert.equal(result.actuation_ok, false);
 });
 
+
+
+test("dry run includes bedroom ceiling fan without webhook calls", async () => {
+  const alexa = await startWebhookRecorder();
+  const meross = await startWebhookRecorder();
+  const decision = buildDecision();
+  const result = await actuate(
+    buildConfig({ DRY_RUN: true, ALEXA_WEBHOOK_URL: alexa.url, MEROSS_WEBHOOK_URL: meross.url }),
+    decision,
+    "decision-test"
+  );
+
+  assert.equal(result.actuation_ok, true);
+  assert.deepEqual(result.applied.bedroom_ceiling_fan, { power: "ON" });
+  assert.equal(alexa.bodies.length, 0);
+  assert.equal(meross.bodies.length, 0);
+});
+
+test("disabled bedroom ceiling fan is forced safe OFF and skipped", async () => {
+  const alexa = await startWebhookRecorder();
+  const meross = await startWebhookRecorder();
+  const decision = applyDisabledDeviceOverrides(buildDecision(), ["bedroom_ceiling_fan"]);
+  const result = await actuate(
+    buildConfig({
+      ACTUATION_REASSERT_EVERY_CYCLE: true,
+      DISABLED_DEVICES: ["bedroom_ceiling_fan"],
+      ALEXA_WEBHOOK_URL: alexa.url,
+      MEROSS_WEBHOOK_URL: meross.url
+    }),
+    decision,
+    "decision-test",
+    buildDecision().actions
+  );
+
+  assert.equal(result.actuation_ok, true);
+  assert.deepEqual(result.applied.bedroom_ceiling_fan, { power: "OFF" });
+  assert.equal(alexa.bodies.some((body) => body.device === "bedroom_ceiling_fan"), false);
+});
+
+test("bedroom ceiling fan uses Alexa webhook and not Meross", async () => {
+  const alexa = await startWebhookRecorder();
+  const meross = await startWebhookRecorder();
+  const decision = buildDecision();
+  const lastApplied = structuredClone(decision.actions);
+  lastApplied.bedroom_ceiling_fan = { power: "OFF" };
+  const result = await actuate(
+    buildConfig({ ALEXA_WEBHOOK_URL: alexa.url, MEROSS_WEBHOOK_URL: meross.url }),
+    decision,
+    "decision-test",
+    lastApplied
+  );
+
+  assert.equal(result.actuation_ok, true);
+  assert.ok(alexa.bodies.some((body) => body.kind === "alexa_power_switch" && body.device === "bedroom_ceiling_fan"));
+  assert.equal(meross.bodies.some((body) => body.plug === "bedroom_ceiling_fan"), false);
+});

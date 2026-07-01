@@ -11,7 +11,7 @@ export const TransomStateSchema = z.object({
   set_temp_f: z.number().int().min(60).max(90)
 });
 
-export const PlugStateSchema = z.object({
+export const PowerStateSchema = z.object({
   power: z.enum(["ON", "OFF"])
 });
 
@@ -43,8 +43,9 @@ export const buildDecisionSchema = (curatorLabels: string[]) => {
     actions: z.object({
       kitchen_transom: TransomStateSchema,
       bathroom_transom: TransomStateSchema,
-      kitchen_vornado_630: PlugStateSchema,
-      living_vornado_630: PlugStateSchema
+      kitchen_vornado_630: PowerStateSchema,
+      living_vornado_630: PowerStateSchema,
+      bedroom_ceiling_fan: PowerStateSchema
     }),
     hypothesis: z.string().min(1),
     confidence_0_1: z.number().min(0).max(1),

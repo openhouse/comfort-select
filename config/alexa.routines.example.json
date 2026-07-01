@@ -23,6 +23,8 @@
     "LIVING_VORNADO_630|ON": "amzn1.alexa.automation.example-living-630-on-id",
     "LIVING_VORNADO_630|OFF": "amzn1.alexa.automation.example-living-630-off-id",
     "KITCHEN_VORNADO_630|ON": "amzn1.alexa.automation.example-kitchen-630-on-id",
-    "KITCHEN_VORNADO_630|OFF": "amzn1.alexa.automation.example-kitchen-630-off-id"
+    "KITCHEN_VORNADO_630|OFF": "amzn1.alexa.automation.example-kitchen-630-off-id",
+    "BEDROOM_CEILING_FAN|ON": "Example Bedroom Ceiling Fan - ON",
+    "BEDROOM_CEILING_FAN|OFF": "Example Bedroom Ceiling Fan - OFF"
   }
 }
