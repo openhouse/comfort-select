@@ -41,6 +41,7 @@ export async function getWeatherNow(params: {
     wind_mph: cur.wind_speed_10m,
     wind_dir_deg: cur.wind_direction_10m,
     precip_in_hr: cur.precipitation,
-    observation_time_utc: new Date().toISOString()
+    observation_time_utc: new Date().toISOString(),
+    source: "open_meteo"
   };
 }

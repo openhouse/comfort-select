@@ -287,7 +287,114 @@ function fallbackSensors(reason: string): SensorsNow {
   };
 }
 
-export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): Promise<CycleRecord> {
+function compactReason(reason: string, maxChars = 180): string {
+  const compact = reason.replace(/\s+/g, " ").trim();
+  return compact.length > maxChars ? `${compact.slice(0, maxChars - 3)}...` : compact;
+}
+
+export function isUsableWeatherForFallback(weather?: WeatherNow | null): weather is WeatherNow {
+  if (!weather) return false;
+  if (!Number.isFinite(weather.temp_f) || !Number.isFinite(weather.rh_pct)) return false;
+  if (weather.rh_pct <= 0 || weather.rh_pct > 100) return false;
+  if (weather.temp_f <= -80 || weather.temp_f >= 140) return false;
+  if (weather.temp_f === 0 && weather.rh_pct === 0) return false;
+  if (weather.conditions?.trim().toLowerCase().startsWith("unavailable")) return false;
+  return true;
+}
+
+function weatherObservationMillis(record: CycleRecord): number | null {
+  const weatherObservedAt = Date.parse(record.weather?.observation_time_utc ?? "");
+  if (Number.isFinite(weatherObservedAt)) return weatherObservedAt;
+
+  const recordObservedAt = Date.parse(record.timestamp_utc_iso);
+  return Number.isFinite(recordObservedAt) ? recordObservedAt : null;
+}
+
+export function findRecentUsableWeather(params: {
+  records: CycleRecord[];
+  nowIso: string;
+  maxAgeMinutes: number;
+}): { weather: WeatherNow; ageMinutes: number; record: CycleRecord } | null {
+  const nowMillis = Date.parse(params.nowIso);
+  if (!Number.isFinite(nowMillis)) return null;
+
+  let best: { weather: WeatherNow; ageMinutes: number; record: CycleRecord } | null = null;
+  for (const record of params.records) {
+    if (!isUsableWeatherForFallback(record.weather)) continue;
+    const observedAt = weatherObservationMillis(record);
+    if (observedAt === null) continue;
+
+    const ageMinutes = (nowMillis - observedAt) / 60_000;
+    if (ageMinutes < 0 || ageMinutes > params.maxAgeMinutes) continue;
+    if (!best || ageMinutes < best.ageMinutes) {
+      best = { weather: record.weather, ageMinutes, record };
+    }
+  }
+
+  return best;
+}
+
+function buildStaleWeather(params: {
+  stale: { weather: WeatherNow; ageMinutes: number };
+  fetchError: string;
+}): WeatherNow {
+  const ageMinutes = Number(params.stale.ageMinutes.toFixed(1));
+  const reason = compactReason(params.fetchError);
+  const priorConditions = params.stale.weather.conditions ? compactReason(params.stale.weather.conditions, 120) : null;
+  const conditionParts = [
+    `stale/degraded from Mongo history (${ageMinutes} min old; Open-Meteo failed: ${reason})`,
+    priorConditions ? `prior conditions: ${priorConditions}` : null
+  ].filter(Boolean);
+
+  return {
+    ...structuredClone(params.stale.weather),
+    source: "mongo_history",
+    degraded: true,
+    stale: true,
+    stale_age_minutes: ageMinutes,
+    fallback_reason: reason,
+    conditions: conditionParts.join("; ")
+  };
+}
+
+function historyReadLimit(cfg: AppConfig): number | undefined {
+  if (cfg.HISTORY_MODE !== "window") return undefined;
+  const weatherRows = Math.ceil(cfg.WEATHER_STALE_MAX_MINUTES / Math.max(cfg.CYCLE_MINUTES, 1)) + 5;
+  return Math.max(cfg.HISTORY_ROWS, cfg.PROMPT_HISTORY_MAX_ROWS, weatherRows);
+}
+
+interface RunCycleDependencies {
+  initMongo: typeof initMongo;
+  getRecentCycleRecords: typeof getRecentCycleRecords;
+  insertCycleRecord: typeof insertCycleRecord;
+  getWeatherNow: typeof getWeatherNow;
+  getSensorsNowFromCloud: typeof getSensorsNowFromCloud;
+  getSensorsNowFromLocalGateway: typeof getSensorsNowFromLocalGateway;
+  getSensorsNowFromMock: typeof getSensorsNowFromMock;
+  decideWithOpenAI: typeof decideWithOpenAI;
+  actuateDecision: typeof actuate;
+  overwriteSheet: typeof overwriteSheet;
+}
+
+const defaultRunCycleDependencies: RunCycleDependencies = {
+  initMongo,
+  getRecentCycleRecords,
+  insertCycleRecord,
+  getWeatherNow,
+  getSensorsNowFromCloud,
+  getSensorsNowFromLocalGateway,
+  getSensorsNowFromMock,
+  decideWithOpenAI,
+  actuateDecision: actuate,
+  overwriteSheet
+};
+
+export async function runCycleOnce(
+  cfg: AppConfig,
+  promptAssets: PromptAssets,
+  deps: Partial<RunCycleDependencies> = {}
+): Promise<CycleRecord> {
+  const runDeps = { ...defaultRunCycleDependencies, ...deps };
   const decision_id = `decision_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   const siteTimezone = promptAssets.siteConfig.site.timezone ?? cfg.TIMEZONE;
   const sheetHeader = buildSheetHeader(promptAssets.siteConfig);
@@ -302,12 +409,14 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
 
   logger.info({ timestamp_local_iso, decision_id }, "Cycle start");
 
-  const blockingErrors: string[] = [];
-  const nonBlockingErrors: string[] = [];
+  const dataErrors: string[] = [];
+  const dataWarnings: string[] = [];
+  const decisionErrors: string[] = [];
+  const cycleWarnings: string[] = [];
 
   let mongoStore: MongoStore | null = null;
   try {
-    mongoStore = await initMongo({
+    mongoStore = await runDeps.initMongo({
       uri: cfg.MONGODB_URI,
       dbName: cfg.MONGODB_DB_NAME,
       collectionName: cfg.MONGODB_COLLECTION
@@ -315,23 +424,48 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
   } catch (e: any) {
     const msg = `Failed to connect to MongoDB: ${e?.message ?? String(e)}`;
     logger.error({ err: e }, msg);
-    blockingErrors.push(msg);
+    dataErrors.push(msg);
+  }
+
+  let historyRecords: CycleRecord[] = [];
+  if (mongoStore) {
+    try {
+      historyRecords = await runDeps.getRecentCycleRecords(mongoStore, historyReadLimit(cfg));
+    } catch (e: any) {
+      const msg = `Failed to read Mongo history: ${e?.message ?? String(e)}`;
+      logger.error({ err: e }, msg);
+      dataErrors.push(msg);
+    }
   }
 
   let weather: WeatherNow | null = null;
   try {
     const loc = promptAssets.siteConfig.site.location;
-    weather = await getWeatherNow({
+    weather = await runDeps.getWeatherNow({
       lat: loc?.lat ?? cfg.HOME_LAT,
       lon: loc?.lon ?? cfg.HOME_LON,
       timezone: siteTimezone,
       timeoutMs: cfg.HTTP_TIMEOUT_MS
     });
   } catch (e: any) {
-    const msg = `Weather fetch failed: ${e?.message ?? String(e)}`;
-    logger.error({ err: e }, msg);
-    blockingErrors.push(msg);
-    weather = fallbackWeather(msg);
+    const fetchMsg = `Weather fetch failed: ${e?.message ?? String(e)}`;
+    const stale = findRecentUsableWeather({
+      records: historyRecords,
+      nowIso: timestamp_utc_iso,
+      maxAgeMinutes: cfg.WEATHER_STALE_MAX_MINUTES
+    });
+
+    if (stale) {
+      weather = buildStaleWeather({ stale, fetchError: fetchMsg });
+      const msg = `${fetchMsg}; using stale weather from ${stale.record.decision_id} (${weather.stale_age_minutes} min old)`;
+      logger.warn({ err: e, stale_weather_observed_at: stale.weather.observation_time_utc }, msg);
+      dataWarnings.push(msg);
+    } else {
+      const msg = `${fetchMsg}; no valid weather history within ${cfg.WEATHER_STALE_MAX_MINUTES} minutes`;
+      logger.error({ err: e }, msg);
+      dataErrors.push(msg);
+      weather = fallbackWeather(msg);
+    }
   }
 
   let sensors: SensorsNow | null = null;
@@ -340,7 +474,7 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
       if (!cfg.ECOWITT_CLOUD_APPLICATION_KEY || !cfg.ECOWITT_CLOUD_API_KEY) {
         throw new Error("ECOWITT_CLOUD_APPLICATION_KEY and ECOWITT_CLOUD_API_KEY required for cloud_api");
       }
-      sensors = await getSensorsNowFromCloud({
+      sensors = await runDeps.getSensorsNowFromCloud({
         mappingPath: cfg.ECOWITT_MAPPING_JSON,
         applicationKey: cfg.ECOWITT_CLOUD_APPLICATION_KEY,
         apiKey: cfg.ECOWITT_CLOUD_API_KEY,
@@ -349,13 +483,13 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
       });
     } else if (cfg.ECOWITT_SOURCE === "local_gateway") {
       if (!cfg.ECOWITT_GATEWAY_URL) throw new Error("ECOWITT_GATEWAY_URL required for local_gateway");
-      sensors = await getSensorsNowFromLocalGateway({
+      sensors = await runDeps.getSensorsNowFromLocalGateway({
         gatewayUrl: cfg.ECOWITT_GATEWAY_URL,
         mappingPath: cfg.ECOWITT_MAPPING_JSON,
         timeoutMs: cfg.HTTP_TIMEOUT_MS
       });
     } else {
-      sensors = await getSensorsNowFromMock({
+      sensors = await runDeps.getSensorsNowFromMock({
         mappingPath: cfg.ECOWITT_MAPPING_JSON,
         mockPath: "./mock/ecowitt.sample.json"
       });
@@ -363,26 +497,12 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
   } catch (e: any) {
     const msg = `Sensor fetch failed: ${e?.message ?? String(e)}`;
     logger.error({ err: e }, msg);
-    blockingErrors.push(msg);
+    dataErrors.push(msg);
     sensors = fallbackSensors(msg);
   }
 
   const telemetry = summarizeTelemetry(promptAssets.siteConfig, sensors!);
   const features = telemetry.features;
-
-  let historyRecords: CycleRecord[] = [];
-  if (mongoStore) {
-    try {
-      historyRecords = await getRecentCycleRecords(
-        mongoStore,
-        cfg.HISTORY_MODE === "window" ? Math.max(cfg.HISTORY_ROWS, cfg.PROMPT_HISTORY_MAX_ROWS) : undefined
-      );
-    } catch (e: any) {
-      const msg = `Failed to read Mongo history: ${e?.message ?? String(e)}`;
-      logger.error({ err: e }, msg);
-      blockingErrors.push(msg);
-    }
-  }
 
   const promptHistory = buildPromptHistoryWindow({
     records: historyRecords,
@@ -404,13 +524,12 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
     promptAssets
   });
 
-  const decisionErrors: string[] = [];
   let decision: Decision;
-  if (blockingErrors.length > 0) {
-    decision = noopDecision(blockingErrors.join("; "), promptAssets.curatorLabels);
+  if (dataErrors.length > 0) {
+    decision = noopDecision(dataErrors.join("; "), promptAssets.curatorLabels);
   } else {
     try {
-      const { decision: llmDecision, responseId } = await decideWithOpenAI(
+      const { decision: llmDecision, responseId } = await runDeps.decideWithOpenAI(
         {
           apiKey: cfg.OPENAI_API_KEY,
           model: cfg.OPENAI_DECISION_MODEL ?? cfg.OPENAI_MODEL,
@@ -432,12 +551,17 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
   decision = applyDisabledDeviceOverrides(decision, cfg.DISABLED_DEVICES);
 
   let actuation: ActuationResult;
-  if (blockingErrors.length > 0 || decisionErrors.length > 0) {
-    actuation = { applied: decision.actions, errors: [...blockingErrors, ...decisionErrors], actuation_ok: false };
+  if (dataErrors.length > 0 || decisionErrors.length > 0) {
+    actuation = { applied: decision.actions, errors: [], actuation_ok: false };
   } else {
-    actuation = await actuate(cfg, decision, decision_id, promptHistory.lastApplied);
+    try {
+      actuation = await runDeps.actuateDecision(cfg, decision, decision_id, promptHistory.lastApplied);
+    } catch (e: any) {
+      const msg = `Actuation failed: ${e?.message ?? String(e)}`;
+      logger.error({ err: e }, msg);
+      actuation = { applied: decision.actions, errors: [msg], actuation_ok: false };
+    }
   }
-  actuation.errors.push(...nonBlockingErrors);
 
   const record: CycleRecord = {
     decision_id,
@@ -451,29 +575,33 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
     telemetry,
     features,
     decision,
-    actuation
+    actuation,
+    data_errors: dataErrors,
+    data_warnings: dataWarnings,
+    decision_errors: decisionErrors,
+    actuation_errors: actuation.errors,
+    cycle_warnings: cycleWarnings
   };
 
   const siteConfigHash = hashSiteConfig(promptAssets.siteConfig);
 
   if (mongoStore) {
     try {
-      await insertCycleRecord(mongoStore, record, { siteConfigHash });
+      await runDeps.insertCycleRecord(mongoStore, record, { siteConfigHash });
     } catch (e: any) {
       const msg = `Failed to insert cycle record into MongoDB: ${e?.message ?? String(e)}`;
       logger.error({ err: e }, msg);
-      actuation.errors.push(msg);
+      cycleWarnings.push(msg);
     }
 
     try {
-      const rowsForSheet = await getRecentCycleRecords(mongoStore, cfg.SHEET_SYNC_ROWS);
+      const rowsForSheet = await runDeps.getRecentCycleRecords(mongoStore, cfg.SHEET_SYNC_ROWS);
       const projectedRows = rowsForSheet.map((rec) => cycleRecordToRow(rec, promptAssets.siteConfig, sheetHeader));
-      await overwriteSheet(sheetsCfg, [sheetHeader, ...projectedRows]);
+      await runDeps.overwriteSheet(sheetsCfg, [sheetHeader, ...projectedRows]);
     } catch (e: any) {
       const msg = `Failed to sync Google Sheet from MongoDB (non-blocking): ${e?.message ?? String(e)}`;
       logger.error({ err: e }, msg);
-      nonBlockingErrors.push(msg);
-      actuation.errors.push(msg);
+      cycleWarnings.push(msg);
     }
   }
 
@@ -481,7 +609,12 @@ export async function runCycleOnce(cfg: AppConfig, promptAssets: PromptAssets): 
     {
       decision_id,
       decision_confidence: record.decision.confidence_0_1,
-      actuation_errors: record.actuation.errors.length
+      data_errors: record.data_errors,
+      data_warnings: record.data_warnings,
+      decision_errors: record.decision_errors,
+      actuation_errors: record.actuation_errors,
+      cycle_warnings: record.cycle_warnings,
+      actuation_ok: record.actuation.actuation_ok
     },
     "Cycle complete"
   );

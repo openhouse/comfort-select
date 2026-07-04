@@ -104,7 +104,7 @@ export function cycleRecordToPromptHistoryRow(
     flattenDeviceState(rec.actuation.applied[device.id as keyof Decision["actions"]], "applied", device.id, values);
   });
 
-  const compactErrors = rec.actuation.errors.join(" | ");
+  const compactErrors = (rec.actuation_errors ?? rec.actuation.errors ?? []).join(" | ");
 
   values.hypothesis = rec.decision.hypothesis.slice(0, 200);
   values.confidence_0_1 = rec.decision.confidence_0_1;

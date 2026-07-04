@@ -25,9 +25,13 @@ function buildWeatherLine(weather: WeatherNow): string {
   const parts = [
     `${weather.temp_f.toFixed(1)}°F`,
     `${weather.rh_pct.toFixed(0)}% RH`,
+    weather.stale || weather.degraded
+      ? `DEGRADED/STALE outdoor context (${weather.stale_age_minutes ?? "?"} min old)`
+      : null,
     weather.conditions ? `conditions: ${weather.conditions}` : null,
     `wind: ${weather.wind_mph ?? "?"} mph @ ${weather.wind_dir_deg ?? "?"}°`,
-    `precip: ${weather.precip_in_hr ?? "?"} in/hr`
+    `precip: ${weather.precip_in_hr ?? "?"} in/hr`,
+    `observed: ${weather.observation_time_utc}`
   ].filter(Boolean);
   return parts.join("; ");
 }

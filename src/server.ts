@@ -12,7 +12,11 @@ export function startServer(params: { port: number; getLast: () => CycleRecord |
       last_cycle_utc: last?.timestamp_utc_iso ?? null,
       last_cycle_local: last?.timestamp_local_iso ?? null,
       last_confidence: last?.decision.confidence_0_1 ?? null,
-      last_actuation_errors: last?.actuation.errors ?? null,
+      last_data_errors: last?.data_errors ?? null,
+      last_data_warnings: last?.data_warnings ?? null,
+      last_decision_errors: last?.decision_errors ?? null,
+      last_actuation_errors: last?.actuation_errors ?? last?.actuation.errors ?? null,
+      last_cycle_warnings: last?.cycle_warnings ?? null,
       last_actuation_ok: last?.actuation.actuation_ok ?? null,
       last_decision_id: last?.decision_id ?? null
     });
@@ -25,6 +29,11 @@ export function startServer(params: { port: number; getLast: () => CycleRecord |
       timestamp_utc: last.timestamp_utc_iso,
       decision_id: last.decision_id,
       decision: last.decision,
+      data_errors: last.data_errors,
+      data_warnings: last.data_warnings,
+      decision_errors: last.decision_errors,
+      actuation_errors: last.actuation_errors,
+      cycle_warnings: last.cycle_warnings,
       actuation: last.actuation
     });
   });

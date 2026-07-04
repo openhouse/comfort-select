@@ -13,7 +13,7 @@
     "init-sheet": "tsx scripts/init-sheet.ts",
     "rebuild-sheet": "tsx scripts/rebuild-sheet.ts",
     "print-prompt": "tsx scripts/print-prompt.ts",
-    "test": "tsx --test src/llm/schema.test.ts src/adapters/sensors/ecowittCloud.test.ts src/history/promptHistory.test.ts src/config.test.ts src/cycle.test.ts services/actuator-bridge/lib.test.ts",
+    "test": "tsx --test src/llm/schema.test.ts src/adapters/sensors/ecowittCloud.test.ts src/history/promptHistory.test.ts src/config.test.ts src/cycle.test.ts src/utils/fetchWithTimeout.test.ts services/actuator-bridge/lib.test.ts",
     "actuator-bridge": "npm run dev:actuator-bridge",
     "dev:actuator-bridge": "tsx services/actuator-bridge/index.ts",
     "start:actuator-bridge": "node dist/services/actuator-bridge/index.js",
@@ -38,6 +38,7 @@
     "openai": "^4.73.1",
     "pino": "^9.3.2",
     "pino-pretty": "^11.2.2",
+    "undici": "^6.27.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

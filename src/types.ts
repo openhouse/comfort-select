@@ -86,6 +86,11 @@ export interface WeatherNow {
   precip_in_hr?: number;
   conditions?: string;
   observation_time_utc: string;
+  source?: "open_meteo" | "mongo_history";
+  degraded?: boolean;
+  stale?: boolean;
+  stale_age_minutes?: number;
+  fallback_reason?: string;
 }
 
 export interface SensorsNow {
@@ -216,4 +221,10 @@ export interface CycleRecord {
 
   decision: Decision;
   actuation: ActuationResult;
+
+  data_errors: string[];
+  data_warnings: string[];
+  decision_errors: string[];
+  actuation_errors: string[];
+  cycle_warnings: string[];
 }

@@ -70,7 +70,12 @@ function buildRecord(idx: number, base: Date): CycleRecord {
       applied: decision.actions,
       errors: [],
       actuation_ok: true
-    }
+    },
+    data_errors: [],
+    data_warnings: [],
+    decision_errors: [],
+    actuation_errors: [],
+    cycle_warnings: []
   };
 }
 

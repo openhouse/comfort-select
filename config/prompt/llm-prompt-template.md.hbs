@@ -92,6 +92,7 @@ Return ONLY JSON matching this schema (no commentary):
 - Current manual bedroom fan state may be noted in site config, but the only valid action is ON/OFF.
 - Vornado Transom AE fans: only on/off + direction + speed; auto/set_temp_f optional if useful.
 - Direction meanings: EXHAUST (pull out), DIRECT (intake).
+- Treat Ecowitt indoor readings as primary comfort/safety data. If outdoor weather is marked stale/degraded, prefer conservative indoor circulation actions such as ceiling fan or power-only Vornado fans under indoor heat stress, and avoid aggressive transom ventilation unless the stale outdoor temperature/humidity still suggest outdoor air is favorable.
 {{! - Use available gradients (e.g., living_radiator_delta_f) and connectivity to reason about flow paths. /}}
 {{! - Maintain idempotency: avoid changing device states if already at requested values. /}}
 - Always include `predictions` (use an empty array [] if no predictions or no change expected). Use `null` for unknown deltas.

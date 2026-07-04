@@ -113,7 +113,11 @@ export function buildSheetHeader(siteConfig: SiteConfig): string[] {
     "panel_text",
     "predictions_json",
     "decision_json",
+    "data_errors_json",
+    "data_warnings_json",
+    "decision_errors_json",
     "actuation_errors_json",
+    "cycle_warnings_json",
     "decision_id",
     "llm_model",
     "actuation_ok",
@@ -253,7 +257,11 @@ export function cycleRecordToRow(rec: CycleRecord, siteConfig: SiteConfig, heade
   values.panel_text = panelText;
   values.predictions_json = JSON.stringify(rec.decision.predictions ?? []);
   values.decision_json = JSON.stringify(rec.decision);
-  values.actuation_errors_json = JSON.stringify(rec.actuation.errors);
+  values.data_errors_json = JSON.stringify(rec.data_errors ?? []);
+  values.data_warnings_json = JSON.stringify(rec.data_warnings ?? []);
+  values.decision_errors_json = JSON.stringify(rec.decision_errors ?? []);
+  values.actuation_errors_json = JSON.stringify(rec.actuation_errors ?? rec.actuation.errors ?? []);
+  values.cycle_warnings_json = JSON.stringify(rec.cycle_warnings ?? []);
   values.decision_id = rec.decision_id;
   values.llm_model = rec.llm_model;
   values.actuation_ok = rec.actuation.actuation_ok;
