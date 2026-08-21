@@ -201,9 +201,13 @@ export interface Decision {
 }
 
 export interface ActuationResult {
-  applied: Decision["actions"];
+  /** Last transport-acknowledged state. Missing devices are unknown. */
+  applied: Partial<Decision["actions"]>;
   errors: string[];
   actuation_ok: boolean;
+  /** Version 2 never promotes requested, rejected, dry-run, or disabled state to applied. */
+  state_tracking_version?: 2;
+  disabled_devices?: DeviceKey[];
 }
 
 export interface CycleRecord {

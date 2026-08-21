@@ -120,28 +120,25 @@ export async function actuate(
   cfg: AppConfig,
   decision: Decision,
   decisionId: string,
-  lastApplied?: Decision["actions"]
+  lastApplied?: Partial<Decision["actions"]>
 ): Promise<ActuationResult> {
   const errors: string[] = [];
   const disabledDevices = disabledDeviceSet(cfg);
-  const applied: Decision["actions"] = {
-    kitchen_transom: structuredClone(lastApplied?.kitchen_transom ?? decision.actions.kitchen_transom),
-    bathroom_transom: structuredClone(lastApplied?.bathroom_transom ?? decision.actions.bathroom_transom),
-    kitchen_vornado_630: structuredClone(lastApplied?.kitchen_vornado_630 ?? decision.actions.kitchen_vornado_630),
-    living_vornado_630: structuredClone(lastApplied?.living_vornado_630 ?? decision.actions.living_vornado_630),
-    bedroom_ceiling_fan: structuredClone(lastApplied?.bedroom_ceiling_fan ?? decision.actions.bedroom_ceiling_fan)
-  };
-
-  for (const device of disabledDevices) {
-    (applied as Record<DeviceKey, Decision["actions"][DeviceKey]>)[device] = disabledSafeState(device);
-  }
+  const applied: Partial<Decision["actions"]> = structuredClone(lastApplied ?? {});
+  const result = (): ActuationResult => ({
+    applied,
+    errors,
+    actuation_ok: errors.length === 0,
+    state_tracking_version: 2,
+    disabled_devices: [...disabledDevices]
+  });
 
   const activeTransomDevices = TRANSOM_DEVICES.filter((device) => !disabledDevices.has(device));
   const activePlugDevices = MEROSS_PLUG_DEVICES.filter((plug) => !disabledDevices.has(plug));
   const activeAlexaPowerDevices = ALEXA_POWER_DEVICES.filter((device) => !disabledDevices.has(device));
 
   if (cfg.DRY_RUN) {
-    return { applied, errors, actuation_ok: true };
+    return result();
   }
 
   const alexaDryRun = cfg.DRY_RUN || !cfg.ALEXA_WEBHOOK_URL;
@@ -155,7 +152,7 @@ export async function actuate(
   }
 
   for (const device of disabledDevices) {
-    logger.info({ device }, "Device disabled by local config; skipping actuator call and recording safe OFF");
+    logger.info({ device }, "Device disabled by local config; skipping actuator call without changing known applied state");
   }
 
   // Transoms (Alexa webhook)
@@ -172,7 +169,6 @@ export async function actuate(
     }
 
     if (!cfg.ALEXA_WEBHOOK_URL && !cfg.DRY_RUN) {
-      applied[device] = previous ?? requested;
       continue;
     }
 
@@ -182,13 +178,12 @@ export async function actuate(
           url: cfg.ALEXA_WEBHOOK_URL,
           token: cfg.ALEXA_WEBHOOK_TOKEN,
           dryRun: alexaDryRun,
-          timeoutMs: cfg.HTTP_TIMEOUT_MS
+          timeoutMs: cfg.ACTUATOR_HTTP_TIMEOUT_MS
         },
         { device, state: requested, decisionId }
       );
       applied[device] = requested;
     } catch (e: any) {
-      applied[device] = previous ?? requested;
       errors.push(`${device}: ${e?.message ?? String(e)}`);
     }
   }
@@ -208,7 +203,6 @@ export async function actuate(
     }
 
     if (!cfg.ALEXA_WEBHOOK_URL && !cfg.DRY_RUN) {
-      applied[device] = previous ?? requested;
       continue;
     }
 
@@ -218,13 +212,12 @@ export async function actuate(
           url: cfg.ALEXA_WEBHOOK_URL,
           token: cfg.ALEXA_WEBHOOK_TOKEN,
           dryRun: alexaDryRun,
-          timeoutMs: cfg.HTTP_TIMEOUT_MS
+          timeoutMs: cfg.ACTUATOR_HTTP_TIMEOUT_MS
         },
         { device, state: requested, decisionId }
       );
       applied[device] = requested;
     } catch (e: any) {
-      applied[device] = previous ?? requested;
       errors.push(`${device}: ${e?.message ?? String(e)}`);
     }
   }
@@ -243,7 +236,6 @@ export async function actuate(
     }
 
     if (!cfg.MEROSS_WEBHOOK_URL && !cfg.DRY_RUN) {
-      applied[plug] = previous ?? requested;
       continue;
     }
 
@@ -253,18 +245,17 @@ export async function actuate(
           url: cfg.MEROSS_WEBHOOK_URL,
           token: cfg.MEROSS_WEBHOOK_TOKEN,
           dryRun: merossDryRun,
-          timeoutMs: cfg.HTTP_TIMEOUT_MS
+          timeoutMs: cfg.ACTUATOR_HTTP_TIMEOUT_MS
         },
         { plug, state: requested, decisionId }
       );
       applied[plug] = requested;
     } catch (e: any) {
-      applied[plug] = previous ?? requested;
       errors.push(`${plug}: ${e?.message ?? String(e)}`);
     }
   }
 
-  return { applied, errors, actuation_ok: errors.length === 0 };
+  return result();
 }
 
 function fallbackWeather(reason: string): WeatherNow {
@@ -524,6 +515,7 @@ export async function runCycleOnce(
     promptAssets
   });
 
+  const decisionModel = cfg.OPENAI_DECISION_MODEL ?? cfg.OPENAI_MODEL;
   let decision: Decision;
   if (dataErrors.length > 0) {
     decision = noopDecision(dataErrors.join("; "), promptAssets.curatorLabels);
@@ -532,7 +524,7 @@ export async function runCycleOnce(
       const { decision: llmDecision, responseId } = await runDeps.decideWithOpenAI(
         {
           apiKey: cfg.OPENAI_API_KEY,
-          model: cfg.OPENAI_DECISION_MODEL ?? cfg.OPENAI_MODEL,
+          model: decisionModel,
           timeoutMs: cfg.OPENAI_TIMEOUT_MS,
           maxRetries: cfg.OPENAI_MAX_RETRIES,
           curatorLabels: promptAssets.curatorLabels
@@ -552,14 +544,26 @@ export async function runCycleOnce(
 
   let actuation: ActuationResult;
   if (dataErrors.length > 0 || decisionErrors.length > 0) {
-    actuation = { applied: decision.actions, errors: [], actuation_ok: false };
+    actuation = {
+      applied: structuredClone(promptHistory.lastApplied ?? {}),
+      errors: [],
+      actuation_ok: false,
+      state_tracking_version: 2,
+      disabled_devices: [...cfg.DISABLED_DEVICES]
+    };
   } else {
     try {
       actuation = await runDeps.actuateDecision(cfg, decision, decision_id, promptHistory.lastApplied);
     } catch (e: any) {
       const msg = `Actuation failed: ${e?.message ?? String(e)}`;
       logger.error({ err: e }, msg);
-      actuation = { applied: decision.actions, errors: [msg], actuation_ok: false };
+      actuation = {
+        applied: structuredClone(promptHistory.lastApplied ?? {}),
+        errors: [msg],
+        actuation_ok: false,
+        state_tracking_version: 2,
+        disabled_devices: [...cfg.DISABLED_DEVICES]
+      };
     }
   }
 
@@ -567,7 +571,7 @@ export async function runCycleOnce(
     decision_id,
     timestamp_local_iso,
     timestamp_utc_iso,
-    llm_model: cfg.OPENAI_MODEL,
+    llm_model: decisionModel,
     prompt_template_version: promptVersion,
     site_config_id: siteConfigId,
     weather: weather!,

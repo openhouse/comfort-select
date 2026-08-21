@@ -70,7 +70,8 @@ Edit `.env`:
   * `PROMPT_HISTORY_MAX_MINUTES=180` (wall-clock cap for prompt history)
   * `PROMPT_HISTORY_SUMMARY_MAX_CHARS=1200` (auto-generated summary block trim)
 * `PROMPT_MAX_CHARS=120000` (safety cap on history CSV length)
-* `HTTP_TIMEOUT_MS=10000` (network timeout for sensors/weather/webhooks/OpenAI)
+* `HTTP_TIMEOUT_MS=10000` (network timeout for sensors and weather)
+* `ACTUATOR_HTTP_TIMEOUT_MS=60000` (separate webhook timeout; Alexa routine execution can take longer than sensor requests)
 * `ROUTINE_MAP_PATH` (or `ALEXA_ROUTINE_MAP_PATH`) for the Alexa routine bridge; defaults to `./config/alexa.routines.json`
 
 ### 4) Initialize the sheet header row (overwrites the data tab)
@@ -90,6 +91,8 @@ npm run run-once
 ```bash
 npm run dev
 ```
+
+`npm run dev` starts both the controller and actuator bridge. Use `npm run dev:controller` only when the bridge is intentionally hosted elsewhere. `npm run dev:all` remains an alias for the combined command.
 
 Open [http://localhost:3000/healthz](http://localhost:3000/healthz) to see cycle status.
 
@@ -114,11 +117,22 @@ curl -sS http://127.0.0.1:8787/readyz | jq .
 
 ### Run both processes together
 
-For local development you can keep the main app and actuator bridge running together:
+The default development command keeps the main app and actuator bridge running together:
 
 ```bash
-npm run dev:all
+npm run dev
 ```
+
+Before enabling live actuation, require `GET /readyz` on the bridge to return 200. A controller timeout or rejected webhook leaves that device's applied state unknown (or preserves an earlier acknowledged state), so the next cycle retries instead of silently treating the request as successful.
+
+### Reliability eval and hill climb
+
+```bash
+npm run eval
+npm run hill-climb
+```
+
+The focused eval covers the 2026-08-21 first-attempt failure, partial success, missing transport, disabled devices, known prior state, deduplication, and explicit reassertion. The hill-climb command requires a perfect focused score, the full unit suite, and a TypeScript build.
 
 ### Prompt + site configuration
 

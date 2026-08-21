@@ -1,0 +1,79 @@
+[
+  {
+    "id": "success_then_deduplicate",
+    "description": "Accepted commands become last-applied state and are not repeated by default.",
+    "alexa_status": 200,
+    "meross_status": 200,
+    "prior": "none",
+    "disabled": [],
+    "reassert": false,
+    "expected_first_applied": ["bathroom_transom", "bedroom_ceiling_fan", "kitchen_transom", "kitchen_vornado_630", "living_vornado_630"],
+    "expected_calls_after_two": 5
+  },
+  {
+    "id": "first_attempt_failure_retries",
+    "description": "The supplied 2026-08-21 failure: rejected first commands remain unknown and retry next cycle.",
+    "alexa_status": 503,
+    "meross_status": 503,
+    "prior": "none",
+    "disabled": [],
+    "reassert": false,
+    "expected_first_applied": [],
+    "expected_calls_after_two": 10
+  },
+  {
+    "id": "failure_preserves_known_prior",
+    "description": "A failed change preserves a previously accepted OFF state while retrying the requested ON state.",
+    "alexa_status": 503,
+    "meross_status": 503,
+    "prior": "all_off",
+    "disabled": [],
+    "reassert": false,
+    "expected_first_applied": ["bathroom_transom", "bedroom_ceiling_fan", "kitchen_transom", "kitchen_vornado_630", "living_vornado_630"],
+    "expected_calls_after_two": 10
+  },
+  {
+    "id": "partial_success_retries_only_failures",
+    "description": "Accepted Alexa commands deduplicate while rejected Meross commands retry.",
+    "alexa_status": 200,
+    "meross_status": 503,
+    "prior": "none",
+    "disabled": [],
+    "reassert": false,
+    "expected_first_applied": ["bathroom_transom", "bedroom_ceiling_fan", "kitchen_transom"],
+    "expected_calls_after_two": 7
+  },
+  {
+    "id": "disabled_without_prior_is_unknown",
+    "description": "Skipping a disabled device does not prove that the physical device is OFF.",
+    "alexa_status": 200,
+    "meross_status": 200,
+    "prior": "none",
+    "disabled": ["bathroom_transom"],
+    "reassert": false,
+    "expected_first_applied": ["bedroom_ceiling_fan", "kitchen_transom", "kitchen_vornado_630", "living_vornado_630"],
+    "expected_calls_after_two": 4
+  },
+  {
+    "id": "unconfigured_alexa_remains_unknown",
+    "description": "Missing Alexa transport configuration cannot advance Alexa-backed device state.",
+    "alexa_status": "unconfigured",
+    "meross_status": 200,
+    "prior": "none",
+    "disabled": [],
+    "reassert": false,
+    "expected_first_applied": ["kitchen_vornado_630", "living_vornado_630"],
+    "expected_calls_after_two": 2
+  },
+  {
+    "id": "explicit_reassert_repeats_success",
+    "description": "The explicit reassert option repeats even accepted matching state.",
+    "alexa_status": 200,
+    "meross_status": 200,
+    "prior": "none",
+    "disabled": [],
+    "reassert": true,
+    "expected_first_applied": ["bathroom_transom", "bedroom_ceiling_fan", "kitchen_transom", "kitchen_vornado_630", "living_vornado_630"],
+    "expected_calls_after_two": 10
+  }
+]
