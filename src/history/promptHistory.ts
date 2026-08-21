@@ -1,4 +1,4 @@
-import { CycleRecord, Decision, PlugState, Sensor, TransomState } from "../types.js";
+import { CycleRecord, Decision, DeviceKey, PlugState, Sensor, TransomState } from "../types.js";
 import { SiteConfig } from "../siteConfig.js";
 
 function pickSensorsForPrompt(siteConfig: SiteConfig): Sensor[] {
@@ -231,7 +231,7 @@ export function buildPromptHistoryWindow(params: {
   maxRows: number;
   maxMinutes?: number;
   summaryMaxChars?: number;
-}): { historyRows: string[][]; historySummary: string; lastApplied?: Decision["actions"] } {
+}): { historyRows: string[][]; historySummary: string; lastApplied?: Partial<Decision["actions"]> } {
   const { records, siteConfig, maxRows, maxMinutes, summaryMaxChars } = params;
   if (!records || records.length === 0) {
     const header = buildPromptHistoryHeader(siteConfig);
@@ -257,6 +257,40 @@ export function buildPromptHistoryWindow(params: {
   return {
     historyRows: [header, ...rows],
     historySummary: summary,
-    lastApplied: latest?.actuation?.applied
+    lastApplied: deriveLastAppliedActions(records)
   };
+}
+
+const DEVICE_KEYS: DeviceKey[] = [
+  "kitchen_transom",
+  "bathroom_transom",
+  "kitchen_vornado_630",
+  "living_vornado_630",
+  "bedroom_ceiling_fan"
+];
+
+/**
+ * Rebuild known state from history without trusting legacy failed records whose
+ * old writer promoted requested state even when every command was rejected.
+ */
+export function deriveLastAppliedActions(records: CycleRecord[]): Partial<Decision["actions"]> | undefined {
+  const known: Partial<Decision["actions"]> = {};
+
+  for (const record of records) {
+    const actuation = record.actuation;
+    if (!actuation?.applied) continue;
+
+    const isReliableV2 = actuation.state_tracking_version === 2;
+    if (!isReliableV2 && !actuation.actuation_ok) continue;
+
+    const disabled = new Set(actuation.disabled_devices ?? []);
+    for (const device of DEVICE_KEYS) {
+      if (disabled.has(device)) continue;
+      const state = actuation.applied[device];
+      if (state === undefined) continue;
+      (known as Record<DeviceKey, Decision["actions"][DeviceKey]>)[device] = structuredClone(state);
+    }
+  }
+
+  return Object.keys(known).length > 0 ? known : undefined;
 }

@@ -94,3 +94,32 @@ test("prompt history window returns rows when history exists", () => {
   assert.ok(window.historyRows[1].some((cell) => cell !== ""), "first data row should not be empty");
   assert.ok(window.historySummary.includes("window"), "summary should include window metadata");
 });
+
+test("legacy failed device state does not overwrite the last accepted state", () => {
+  const base = new Date("2024-01-01T12:00:00Z");
+  const accepted = buildRecord(0, base);
+  accepted.decision.actions.living_vornado_630 = { power: "OFF" };
+  accepted.actuation.applied.living_vornado_630 = { power: "OFF" };
+
+  const failed = buildRecord(1, base);
+  failed.decision.actions.living_vornado_630 = { power: "ON" };
+  failed.actuation.applied.living_vornado_630 = { power: "ON" };
+  failed.actuation.errors = ["living_vornado_630: fetch failed"];
+  failed.actuation.actuation_ok = false;
+  failed.actuation_errors = [...failed.actuation.errors];
+
+  const window = buildPromptHistoryWindow({ records: [accepted, failed], siteConfig, maxRows: 10 });
+
+  assert.deepEqual(window.lastApplied?.living_vornado_630, { power: "OFF" });
+});
+
+test("legacy first-attempt failure leaves device state unknown", () => {
+  const failed = buildRecord(0, new Date("2024-01-01T12:00:00Z"));
+  failed.actuation.errors = ["kitchen_vornado_630: fetch failed"];
+  failed.actuation.actuation_ok = false;
+  failed.actuation_errors = [...failed.actuation.errors];
+
+  const window = buildPromptHistoryWindow({ records: [failed], siteConfig, maxRows: 10 });
+
+  assert.equal(window.lastApplied?.kitchen_vornado_630, undefined);
+});

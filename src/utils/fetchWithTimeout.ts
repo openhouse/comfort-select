@@ -29,8 +29,6 @@ export async function fetchWithTimeout(url: string, opts: FetchOptions & { timeo
     () => controller.abort(new Error(`Request timed out after ${timeoutMs}ms`)),
     timeoutMs
   );
-  timeout.unref?.();
-
   const combinedSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
 
   try {

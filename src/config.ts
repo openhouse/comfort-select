@@ -63,6 +63,7 @@ const EnvSchema = z.object({
   WEATHER_STALE_MAX_MINUTES: z.coerce.number().int().positive().default(360),
 
   HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+  ACTUATOR_HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
 
   ACTUATION_REASSERT_EVERY_CYCLE: z
     .string()
